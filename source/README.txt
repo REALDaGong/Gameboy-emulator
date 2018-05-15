@@ -1,92 +1,74 @@
-ÒÑ¾­Íê³ÉµÄ²¿·Ö
-	CPUµÄÖ¸Áî¼¯
-	CPU¿ÉÒÔ»ñÖª²¢´¥·¢ÖÐ¶Ï£¬µ«ÊÇ²¢Ã»ÓÐÊµ×°ÈÎºÎÖÐ¶ÏµÄ´¥·¢·½·¨¡£
-	GPUµÄÊ±¼ä¼ÆËã£¬´óÌåÉÏÄÜ¹»×ñÑ­ÕýÈ·µÄÊ±¼äÀ´½øÐÐ»î¶¯,µ«Í¬ÑùÃ»ÓÐÊµ×°ÈÎºÎ»î¶¯¡£
-Ã»ÓÐÍê³ÉµÄ£¬µ«ÊÇÏÂÒ»²½¾ÍÐèÒªÍê³ÉµÄ²¿·Ö
-	×î¼òµ¥:
-	Timer 
-	ÆÀ¼Û£º»¹ºÃ£¬IZ´óÀÐµÄ´úÂëÕâ²¿·Ö»¹ÄÜ¿´¶®£¬Ð´ÁËÕâ¸öÖ®ºó¾Í¿ÉÒÔ³öÀ´Timer OverflowÖÐ¶ÏÁË¡£
-	
-	ÄÑÁË:
-	ÏÔÊ¾¡£
-	Ê×ÏÈ¶ÁÃ÷°×ÏÔÊ¾µÄ·½·¨£¬Ê×ÏÈÓÉÓÚ´æ´¢Æ÷µÄÏÞÖÆ£¬GBµÄÏÔÊ¾ÓÉÊý¾Ý±íºÍÓ³Éä±í¹²Í¬Éú³É£¬Êý¾Ý±í´æ´¢×ÅÍ¼Ïñ£¬ÏêÏ¸¸ñÊ½¼°ÆäÊµ¼ÊÎ»ÖÃ¿É¼ûÊÖ²á£¬Ó³Éä±í¾ö¶¨±³¾°µÄÃ¿¸öÇø¿éÏÔÊ¾ºÎÖÖÍ¼°¸¡£Í¼ÏñµÄÏÔÊ¾·ÖÎª±³¾°ºÍ´°¿ÚÁ½¸ö²¿·Ö£¬Í¬Ê±±³¾°£¬´°¿Ú£¬¾«ÁéÈýÕßÒ²ÓÐ¹ØÓÚÊÇ·ñ¿ÉÒÔ¡°Í¸Ã÷¡±µÄÏ¸½Ú£¬¿ÉÒÔÔÚÊÖ²áÖÐÕÒµ½ÃèÊö¡£ÁíÍâÓÐ¶à¸ö¼Ä´æÆ÷¿ØÖÆËüÃÇÔÚÆÁÄ»ÉÏµÄÏÔÊ¾Î»ÖÃ¡£
-	ÎÒµÄÏë·¨ÊÇÑÏ¸ñ°´ÕÕÔ­¼þ£¬Ò»ÌõÉ¨ÃèÏßÒ»ÌõÉ¨ÃèÏßµÄË¢ÐÂ£¨¸üÐÂÊ±»úÒª×ñÑ­GPUÊ±ÖÓ£©£¬×îºó¸üÐÂÒ»Ö¡£¬ÕâÒ»Ö¡µÄÊý¾ÝÔÚÄÚ´æÖÐÓÃÊý×é´æ´¢£¬ÊÇÒÑ¾­°´ÕÕÕýÈ·Ë³Ðòµþ¼ÓºÃ¾«Áé£¬´°¿ÚºÍ±³¾°µÄ½á¹û£¬°´ÕÕÕâ¸ö½á¹ûÉú³ÉÒ»ÕÅÍ¼Æ¬£¬×îºóäÖÈ¾ÔÚGUIÉÏ¡£
-	Í¬Ê±ÐèÒª½â¾öV-BlankºÍLCDCµÄÎÊÌâ¡£
-	ÉùÒô:
-	Õâ¸öÔÝÊ±ÂÔ¹ý²»±í£¬ÎÒ»ù±¾Ò»µã²»¶®
-	
-	ÓÎÏ·¿ØÖÆ:
-	Õâ¸ö¶«Î÷Éæ¼°µ½Hi-to-LoÖÐ¶Ï£¬²»¸ÒÍý¶¯£¬ÁíÍâ£¬ÔÚÎÒ¿´À´£¬ÊäÈëÊä³öÓ¦ÓÉ×îÍâ²ãµÄGUI½ÓÊÕ£¬ÔÙ´«Èë×îÀï²ãµÄÐéÄâÓ²¼þ¡£
-	
-	¶ÁÈëROM:
-	ÊÇÒ»¸ö¶ÀÁ¢µÄ¹ý³Ì£¬×¢ÒâËüÓ¦ÔÚµÄ²ã´Î¡£
+CPUè²Œä¼¼å®Œæˆäº†ï¼Œä½†æ˜¯æŠ“åˆ°äº†ä¸€åœ°çš„BUGï¼Œå¼€å§‹æ–¹äº†ã€‚
+GPUæ˜¾ç¤ºéƒ¨åˆ†å®Œæˆäº†å¤§éƒ¨åˆ†ï¼Œä½†æ˜¯ä¸€ç‚¹éƒ½æ²¡æµ‹è¿‡ï¼ŒçŽ°åœ¨å·®æŠŠæ•°æ®è½¬ä¸ºé¢œè‰²çš„æœ€åŽä¸€æ­¥ï¼ŒçœŸæ­£æ˜¾ç¤ºå‡ºæ¥ä¸åœ¨æˆ‘èŒè´£èŒƒå›´å†…ï¼Œå“ˆå“ˆ
 
-ÆäËûµÄ¶«Î÷ÔÝÇÒ²»Ìá£¬Ä¿Ç°×îºÃÏÈ½â¾öÏÔÊ¾ÎÊÌâ£¬ÕâÒ»µãµÄÁíÒ»¸öÂé·³ÔÚÓÚµ÷ÊÔ£¬ÒòÎªÐèÒª¿´µÃµ½Êµ¼ÊµÄÍ¼Æ¬¡£ÊÂÊµÉÏÏÖÔÚµÄËùÓÐ´úÂëÒ²Î´¾­¹ý²âÊÔ£¬Èç¹ûÓÐÊ±¼ä¿ÉÒÔ¹ýÒ»±éCPUÖ¸ÁîºÍÄÚ´æ¶ÁÐ´£¬¿´¿´ÊÇ·ñÓÐÎÊÌâ¡£
-GUIµÄ¿ª·¢¿ÉÄÜÐèÒª¿ìÐ©£¬Ä¿Ç°µÄ´úÂëµÄ¿É½áºÏÐÔÓ¦¸Ã»¹¿ÉÒÔ£¬±Ï¾¹Á¬Ò»¸ömainº¯Êý¶¼Ã»ÓÐ£¬QtµÄ°²×°¹ý³ÌÓÐµã¸´ÔÓ£¬×öºÃÐÄÀí×¼±¸¡£
 
-ÒÔÏÂÊÇÕë¶ÔÎÒËùÐ´µÄËùÓÐ´úÂëµÄ½âÊÍ£º
-CPU²¿·Ö£º
-ÀàÃûZ80
-³õÊ¼»¯µÄ·½·¨£ºÉùÃ÷MemoryÀàºÍGPUÀà£¬×÷Îª¹¹Ôìº¯ÊýµÄ²ÎÊý´«Èë£¬½«ËüÃÇ¡°×é×°¡±¡£
-³ÉÔ±:
-Ò»¸öÊ±¼ä¼ÆÊýÆ÷CLOCK£¬¼ÆËãÔÚÄ£ÄâÆ÷ÖÐ¹ýÁË¶àÉÙ¸öÊ±¼äµ¥Î»¡£
-Ò»¸ö¼Ä´æÆ÷½á¹¹Ìå_REG¡£
+ä»¥ä¸‹æ˜¯é’ˆå¯¹æˆ‘æ‰€å†™çš„æ‰€æœ‰ä»£ç çš„è§£é‡Šï¼š
+CPUéƒ¨åˆ†ï¼š
+ç±»åZ80
+åˆå§‹åŒ–çš„æ–¹æ³•ï¼šå£°æ˜ŽMemoryç±»å’ŒGPUç±»å’Œtimerç±»ï¼Œä½œä¸ºæž„é€ å‡½æ•°çš„å‚æ•°ä¼ å…¥ï¼Œå°†å®ƒä»¬â€œç»„è£…â€ã€‚
+æˆå‘˜:
 
-SetFlag£¬½â¾öCPUÄÚ±êÖ¾Î»¡£
-ÏàÓ¦µÄGetFlag¡£
-¸ßËÙ»º´æÖÐ±êÖ¾Î»¶àÑùÇÒ·±ÔÓ£¬Ã»ÓÐSetFlag¡£
-isPause£¬isStop£¬Ö÷ÒªÊÇÎªÁËÅäºÏHALTºÍSTOPÖ¸Áî£¬µ«ÊÇÏÖÔÚ¿´À´ºÃÏñÃ»ÓÐ±ØÒª¡£
-OpCodeList¼°CBOpCodeList£¬¶¼ÊÇÖ¸Áî¼¯¡£
-»ñÖªÖÐ¶ÏµÄInterruputº¯Êý¡£
-CPUÔËÐÐÒ»ÌõÖ¸ÁîµÄStepº¯Êý£¬ÆäÖÐ×öÁËÈ¡Ö¸£¬ÒëÂëºÍÖ´ÐÐ¹¤×÷£¬Í¬Ê±¿ØÖÆÁËCLOCKµÄÔö¼Ó£¬¼ì²éÁËÖÐ¶Ï¡£
+ä¸€ä¸ªå¯„å­˜å™¨ç»“æž„ä½“_REGã€‚
 
-Memory²¿·Ö:
+SetFlagï¼Œè§£å†³CPUå†…æ ‡å¿—ä½ã€‚
+ç›¸åº”çš„GetFlagã€‚
+é«˜é€Ÿç¼“å­˜ä¸­æ ‡å¿—ä½å¤šæ ·ä¸”ç¹æ‚ï¼Œæ²¡æœ‰SetFlagã€‚
+isPauseï¼ŒisStopï¼Œé™¤äº†é…åˆæŒ‡ä»¤å¤–è¿˜å¯ä»¥é…åˆç”Ÿæˆå¸§çš„é€Ÿåº¦æŽ§åˆ¶ã€‚
+OpCodeListåŠCBOpCodeListï¼Œéƒ½æ˜¯æŒ‡ä»¤é›†ã€‚
+èŽ·çŸ¥ä¸­æ–­çš„Interruputå‡½æ•°ã€‚
+CPUè¿è¡Œä¸€æ¡æŒ‡ä»¤çš„Stepå‡½æ•°ï¼Œå…¶ä¸­åšäº†å–æŒ‡ï¼Œè¯‘ç å’Œæ‰§è¡Œå·¥ä½œï¼ŒåŒæ—¶æŽ§åˆ¶äº†Timerçš„å¢žåŠ ï¼Œæ£€æŸ¥äº†ä¸­æ–­ã€‚
 
-ÀàÃûMemory
-³ÉÔ±£º
-ReadºÍWrite
+Memoryéƒ¨åˆ†:
 
-Ðí¶àÐéÄâ´æ´¢Æ÷¿é¡£
+ç±»åMemory
+æˆå‘˜ï¼š
+Readå’ŒWrite
 
-ÓÉÓÚGB²ÉÓÃÁËÓ³ÉäÀ´´¦ÀíËùÓÐµÄ´æ´¢Æ÷£¬²Î¿¼ÁË´óÀÐµÄ´úÂëºóÎÒ¾ö¶¨¼ÌÐøÕâÒ»ÓÅÁ¼´«Í³£¬ÉùÃ÷ÁË·ÖÁ¢µÄÊý×é£¬ÔÚMemoryWriteºÍMemoryRead·½·¨ÖÐÔÙ×ö¶ÔÓ¦µÄ×ª»»¡£
+è®¸å¤šè™šæ‹Ÿå­˜å‚¨å™¨å—ã€‚
 
-inbiosÖ¸Ê¾Î»
+ç”±äºŽGBé‡‡ç”¨äº†æ˜ å°„æ¥å¤„ç†æ‰€æœ‰çš„å­˜å‚¨å™¨ï¼Œå‚è€ƒäº†å¤§ä½¬çš„ä»£ç åŽæˆ‘å†³å®šç»§ç»­è¿™ä¸€ä¼˜è‰¯ä¼ ç»Ÿï¼Œå£°æ˜Žäº†åˆ†ç«‹çš„æ•°ç»„ï¼Œåœ¨MemoryWriteå’ŒMemoryReadæ–¹æ³•ä¸­å†åšå¯¹åº”çš„è½¬æ¢ã€‚
 
-ÔÚ¿ª»úÊ±µÄÒýµ¼³ÌÐò£¬Òýµ¼Íê³Éºó»á±»Ð¶ÔØ£¬Ð´ËÀÔÚÄÇÒ»ÛçÀï¡£
-MemoryWrite»¹Ã»ÍêÈ«Íê³É£¬°´´óÀÐµÄ´úÂë£¬ÏòÏÔ´æ²¿·ÖÐ´ÈëÊ±Ó¦ÓÐ¸ö¸üÐÂ£¬µ«ÎÒÏÖÔÚÃ»ÏëºÃ¸üÐÂÉ¶¡£
+inbiosæŒ‡ç¤ºä½
 
-LoadRom£¬Î´ÊµÏÖ
-ÓÉÓÚ°Ñ·ÅROMµÄ32Kb·ÖÎªÁËÁ½²¿·Ö£¨rom_bank0 ºÍ rom_other_bank£©,ÔÚÊµÏÖLoadRomÊ±²»ÒªÍüÁËÏòÁ½´¦Ð´Èë¡£
+åœ¨å¼€æœºæ—¶çš„å¼•å¯¼ç¨‹åºï¼Œå¼•å¯¼å®ŒæˆåŽä¼šè¢«å¸è½½ï¼Œå†™æ­»åœ¨é‚£ä¸€å¨é‡Œã€‚
+MemoryWriteåº”è¯¥é™¤äº†éŸ³é¢‘å·²ç»å…¨ä¹Žäº†ã€‚
 
-GPU²¿·Ö:
+LoadRomï¼Œååˆ†ç®€é™‹ï¼Œå†™æ­»äº†è¯»å–åœ°å€ï¼Œæµ‹çš„æ—¶å€™è‡ªå·±æ”¹ä¸€ä¸‹ã€‚
+ç”±äºŽæŠŠæ”¾ROMçš„32Kbåˆ†ä¸ºäº†ä¸¤éƒ¨åˆ†ï¼ˆrom_bank0 å’Œ rom_other_bankï¼‰,åœ¨å®žçŽ°LoadRomæ—¶ä¸è¦å¿˜äº†å‘ä¸¤å¤„å†™å…¥ã€‚
 
-ÀàÃûGPU
-³ÉÔ±£º
-Ê±ÖÓCLOCK£¬ÓÉCPU¸ºÔð¸üÐÂ¡£
-ÓÃÓÚ¡°×é×°¡±µÄMemory &£¬ÒòÎªÏÔ´æ¹ÜÀí²¿·ÖÓÉMemory¸ºÔð¡£
-Ò»¸öScreenÊý×é,´æ´¢ÏàÓ¦µÄÇø¿é±àÂë£¬Ö»ÓÐÕâ¸öÉú³ÉÒ»Ö¡ÊÇ²»¹»µÄ£¬±Ï¾¹»¹ÓÐ´°¿ÚºÍ¾«Áé¡£
-line ¼ÇÂ¼ÒÑ¸üÐÂµÄÉ¨ÃèÏßÊýÁ¿£¬Ä£ÄâÒªÓÃ
-mode ¼ÇÂ¼µ±Ç°ÆÁÄ»µÄÄ£Ê½(ÓÐ¸ö¼Ä´æÆ÷¸ÉÕâÊÂ£¬Õâ¸ö±äÁ¿Ö»ÊÇÓÃÀ´ÔÝ´æµÄ¡£)
+GPUéƒ¨åˆ†:
 
-GPUStep£¬×öGPU¸Ã¸ÉµÄÊÂ£¬ÏÔÊ¾Ê²Ã´µÄ£¬µ«ÊÇÃ»Ð´Íê£¬¾ÍÏñÎÒÉÏÃæÌá¹ýµÄ
-NewlineºÍNewFrame£¬Ë¢ÐÂÏß£¬Ë¢ÐÂÖ¡¡£
-Òª²»°ÑÉú³ÉÍ¼Æ¬µÄ·½·¨Ò²¼Ó½øÈ¥£¿¼ÓÉÏÒ»¸ö·½·¨£¬µ÷ÓÃ¾Í·µ»ØÒ»Ö¡¡£ÕâÑùµ×²ã¾ÍÓÐ»ú»áÍêÈ«·â×°£¬GUIÖ»Ðè·¢Ò»¸öÇëÇó¾Í¿ÉÒÔµÃµ½Ò»Ö¡Í¼ÏñÁË£¬ÓÃÆðÀ´»áºÜ·½±ã¡£¡£¡£
+ç±»åGPU
+æˆå‘˜ï¼š
+æ—¶é’ŸCLOCKï¼Œç”±CPUè´Ÿè´£æ›´æ–°ã€‚
+ç”¨äºŽâ€œç»„è£…â€çš„Memory &ï¼Œå› ä¸ºæ˜¾å­˜ç®¡ç†éƒ¨åˆ†ç”±Memoryè´Ÿè´£ã€‚
+ä¸€ä¸ªScreenæ•°ç»„,å­˜å‚¨ç›¸åº”çš„åŒºå—ç¼–ç ï¼Œåªæœ‰è¿™ä¸ªç”Ÿæˆä¸€å¸§æ˜¯ä¸å¤Ÿçš„ï¼Œæ¯•ç«Ÿè¿˜æœ‰çª—å£å’Œç²¾çµï¼Œä½†æ˜¯è¿™ä¸ªè£…çš„æ˜¯æœ€åŽç”Ÿæˆç»“æžœã€‚
+ä¸€ä¸ªå¤šç”¨çš„Windowæ•°ç»„ï¼Œç”¨ä½œæ›´æ–°å¸§æ—¶å¯¹çª—å£å’Œç²¾çµçš„ä¸´æ—¶å­˜å‚¨ã€‚
+line è®°å½•å·²æ›´æ–°çš„æ‰«æçº¿æ•°é‡ï¼Œæ¨¡æ‹Ÿè¦ç”¨
+mode è®°å½•å½“å‰å±å¹•çš„æ¨¡å¼(æœ‰ä¸ªå¯„å­˜å™¨å¹²è¿™äº‹ï¼Œè¿™ä¸ªå˜é‡åªæ˜¯ç”¨æ¥æš‚å­˜çš„ã€‚)
 
-ÎÒÏëµÄÕû¸ö³ÌÐò¼Ü¹¹£º
+GPUStepï¼ŒåšGPUè¯¥å¹²çš„äº‹ï¼Œæ˜¾ç¤ºä»€ä¹ˆçš„ï¼Œå‘é€ä¸­æ–­ä»€ä¹ˆçš„
+Newlineå’ŒNewFrameï¼ŒUpdateSpriteï¼Œåˆ·æ–°çº¿ï¼Œåˆ·æ–°å¸§ï¼Œåˆ·æ–°ç²¾çµï¼Œ
+NewFrameæ‰“ç®—å†™æˆä¸ªæŽ¥å£ï¼Œä½†æ²¡æƒ³å¥½æ€Žä¹ˆå¾€å¤–é€æ•°æ®ï¼Œç›´æŽ¥å¤åˆ¶å‡ºåŽ»ï¼Ÿ
+ç›®å‰çš„NewFrameçš„ä¸€ä¸ªä½œç”¨æ˜¯æ•´åˆScreenå’ŒWindowï¼Œå†ç»“åˆä¸‰ä¸ªè°ƒè‰²æ¿çš„æ•°æ®ï¼ˆæœªå®žè£…ï¼‰ï¼Œæ˜¾ç¤ºç«¯éœ€è¦çš„æ˜¯è¯»å–å¹¶è½¬åŒ–æˆç›¸åº”é¢œè‰²çš„åƒç´ ç‚¹ã€‚
 
-×îÄÚ²¿£º
-CPU£¬´æ´¢Æ÷£¬GPU
+Timeréƒ¨åˆ†ï¼š
 
-ÖÐ²¿£º
-¶ÔÄÚ²¿½øÐÐ±ØÒª¿ØÖÆ
+å¹¶ä¸æ‡‚ï¼Œæ— è§†å®ƒå§ï¼Œèƒ½ç”¨å°±æˆã€‚
 
-¶¥²¿£º
-GUI
+Mainéƒ¨åˆ†ï¼š
 
-ÓÐÐí¶àµÄÆäËûÏ¸½Ú£¬²»Ò»¶¨ÏëµÄÈ«£¬ÒÔºóÅöµ½ÁËÔÙ¼Ó¡£
+åŸºæœ¬ä¸Šå•¥ä¹Ÿæ²¡æœ‰ï¼Œåªèƒ½è®©CPUèµ°æŒ‡ä»¤ã€‚
 
-»Ø¹ËÒ»ÏÂ£¬Ä¿Ç°ÈÎÎñÊÇÏÈ½â¾öÏÔÊ¾ÎÊÌâ¡£
+å°†æ¥çš„è®¡åˆ’
+å®Œæˆè¾“å…¥ï¼Œè²Œä¼¼çœ‹æ‡‚äº†ï¼Œä½†è¿™ä¸ªä¸»è¦æ˜¯GUIçš„å·¥ä½œ-_-
+æ³¨æ„è¾“å…¥çš„è¯¦ç»†è§£é‡Šï¼Œä¸è¦è¢«æ‰‹å†Œé‡Œçš„åƒè±†äººçš„ä¾‹å­è¯¯å¯¼ï¼Œå°½é‡æŒ‰imrançš„æ¥ã€‚
+CPUè¿˜éœ€è¿›ä¸€æ­¥æµ‹è¯•ï¼ï¼ï¼ï¼ï¼ï¼ï¼ï¼ï¼ï¼ï¼ï¼
+åŽ»æ­»å§
+GPUæ˜¾ç¤ºéƒ¨åˆ†ä»£ç å®¹æ˜“å†™ä¹±ï¼Œç‰¹åˆ«æ³¨æ„ã€‚
+Qtã€‚
+æˆ‘å¹¶ä¸æ‡‚win32ã€‚
 
-×¢£º´úÂëÄÚ²¿²»ÒªÓÐÖÐÎÄ£¬»áÓÐ±àÂëÎÊÌâ
-¹ØµôÔ¤±àÒëÍ·¡£
+æ³¨ï¼šä»£ç å†…éƒ¨ä¸è¦æœ‰ä¸­æ–‡ï¼Œä¼šæœ‰ç¼–ç é—®é¢˜
+å…³æŽ‰é¢„ç¼–è¯‘å¤´ã€‚
 	
