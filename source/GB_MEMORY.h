@@ -2,12 +2,12 @@
 #include "GB.h"
 class Memory {
 public:
-	Memory() {};
+	Memory() { Init(); };
 	~Memory() {};
 	GB_BY MemoryRead(GB_DB ad);
 	void MemoryWrite(GB_DB ad, GB_BY v);
 	void Init();
-	void LoadRom();
+	void LoadRom(std::string &dir);
 private:
 		
 	GB_BY _memory_bios[0x100]={ 

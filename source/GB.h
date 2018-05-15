@@ -3,6 +3,9 @@
 #include<cctype>
 #include<array>
 #include<functional>
+#include<string>
+#include<fstream>
+using namespace std;
 typedef uint32_t CLOCK_Val;
 typedef uint16_t GB_DB;
 typedef uint8_t GB_BY;

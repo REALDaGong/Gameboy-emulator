@@ -2,6 +2,7 @@
 #include "GB.h"
 #include "GB_MEMORY.h"
 #include "GB_GPU.h"
+#include "GB_Timer.h"
 #define FLAG_ZERO 7
 #define FLAG_NEGA 6//sub
 #define FLAG_HACA 5
@@ -12,7 +13,7 @@ class Z80 {
 private:
 		//CLOCK
 	
-	CLOCK_Val CLOCK;
+	//CLOCK_Val CLOCK;
 	
 
 	struct REG {
@@ -79,20 +80,19 @@ private:
 	void SRA(GB_BY &REG);
 	void SRL(GB_BY &REG);
 
-	void BIT(GB_BY REG);
+	void BIT(GB_BY REG, GB_BY No);
 	
 	void RST();
 	void JP();
 	void CALL();
 
-	//void GPUStep();
-	
 	void Interrupt(GB_BY IMEtype);
-	//CLOCK_Val GPU_CLOCK;
+	
 	Memory& _Memory;
 	GPU& _GPU;
+	Timer& _Timer;
 public:
-	explicit Z80(Memory& memory, GPU& GPU) :_Memory(memory), _GPU(GPU) { Init(); };
+	explicit Z80(Memory& memory, GPU& GPU, Timer& Timer) :_Memory(memory), _GPU(GPU), _Timer(Timer){ Init(); };
 	~Z80() {};
 	
 	void Step();

@@ -1,9 +1,19 @@
 #include "GB_MEMORY.h"
-void Memory::LoadRom() {
+#define _EARLY_DEBUG
+#ifdef _EARLY_DEBUG
+void Memory::LoadRom(std::string &dir) {
 	//Load banks from ROM to rom bank0 and others
+	ifstream fin("E:\\gba\\Tetris.gb",ios_base::in| ios_base::binary);
+	fin.read((char*)&_memory_rom_bank0, 0x4000);
+	fin.read((char*)&_memory_rom_other_bank, 0x4000);
+	fin.close();
 }
+#endif
 void Memory::Init() {
 	_inbios = 1;
+
+	string dir;
+	LoadRom(dir);
 }
 GB_BY Memory::MemoryRead(GB_DB ad) {
 	
@@ -58,11 +68,11 @@ GB_BY Memory::MemoryRead(GB_DB ad) {
 			//Zero,IO
 			if ((ad & 0xFF) < 0x80) {
 				
-				return _memory_mapio[ad];
+				return _memory_mapio[ad & 0xFF];
 			}
 			else
 			{
-				return _memory_zero_ram[ad & 0xFF];
+				return _memory_zero_ram[(ad & 0xFF)-0x80];
 			}
 		}
 	}
@@ -100,6 +110,9 @@ void Memory::MemoryWrite(GB_DB ad, GB_BY val) {
 		break;
 	
 	case 0xF000:
+		if (ad == 0xFF00) {
+			MemoryWrite(IF, MemoryRead(IF) | 0x10);//input
+		}
 		if((ad&0xFFF)<0xE00)
 		_memory_working_ram[ad & 0x1FFF] = val;
 		else if ((ad & 0xFFF) < 0xEA0) {//OAM
@@ -108,18 +121,27 @@ void Memory::MemoryWrite(GB_DB ad, GB_BY val) {
 		else {
 			//Zero,IO
 			if ((ad & 0xFF) < 0x80) {
-				if (ad == DIV){_memory_mapio[ad] = 0; break;}
+				if (ad == DIV){_memory_mapio[ad & 0xFF] = 0; break;}
+				if (ad==LY){ _memory_mapio[ad & 0xFF] = 0; break; }
 				if (ad == DMA){
-					for (int i = 0; i < 0xA0; i++) {
-						MemoryWrite(0xFE00 + i, MemoryRead(ad + i));
+					for (int i = 0; i < 14; i++) {
+						MemoryWrite(0xFE00 + i*8, MemoryRead(ad + i*7));
+						MemoryWrite(0xFE00 + i*8+1, MemoryRead(ad + i*7+1));
+						MemoryWrite(0xFE00 + i*8+2, MemoryRead(ad + i*7+2));
+						MemoryWrite(0xFE00 + i*8+3, (MemoryRead(ad + i*7+3)&0x0F)<<4);
+						//which bits should i take?
+						MemoryWrite(0xFE00 + i*8+4, (MemoryRead(ad + i*7+3)&0x0F));
+						MemoryWrite(0xFE00 + i*8+5, MemoryRead(ad + i*7+4));
+						MemoryWrite(0xFE00 + i*8+6, MemoryRead(ad + i*7+5));
+						MemoryWrite(0xFE00 + i*8+7, MemoryRead(ad + i*7+6));
 					}
 					break;
 				}
-				_memory_mapio[ad] = val;
+				_memory_mapio[ad&0xFF] = val;
 			}
 			else
 			{
-				_memory_zero_ram[ad & 0xFF] = val;
+				_memory_zero_ram[(ad & 0xFF)-0x80] = val;
 			}
 		}
 	}
