@@ -12,7 +12,11 @@ int main() {
 }
 
 int Gameloop() {
-	while (1) {
+	
+	for (int i=0;i<0x1000000;i++) {
 		cpu.Step();
+	
 	}
+	return 0;
+
 }

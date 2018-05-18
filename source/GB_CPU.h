@@ -11,10 +11,6 @@
 
 class Z80 {
 private:
-		//CLOCK
-	
-	//CLOCK_Val CLOCK;
-	
 
 	struct REG {
 			GB_BY A, F;			//15...8 7...0
@@ -24,28 +20,22 @@ private:
 			GB_DB SP;			//15.........0
 			GB_DB PC;
 
-			GB_BY FL;			//7.............0
 								//Z N H C 0 0 0 0
 			GB_BY IME;			//
 
 	};
 	REG _REG;
-	void SetFlag(int cname, GB_BY val) {
+	inline void SetFlag(int cname, GB_BY val) {
 		if (val == 0) {
-			val = (GB_BY)1;
-			val <<= cname;
-			val ^= 0xFF;
-			_REG.FL &= val;
-				
+			_REG.F &= ((GB_BY)1<<cname)^0xFF;
 		}
 		else {
-			val <<= cname;
-			_REG.FL |= val;
+			_REG.F |= ((GB_BY)1<<cname);
 		}
 	}
-	//void SetFlag(GB_DB Flag,GB_BY val);
-	GB_BY GetFlag(int cname) {
-		if (_REG.FL&(GB_BY)1 << cname)return (GB_BY)1; return (GB_BY)0;
+	
+	inline GB_BY GetFlag(int cname) {
+		if (_REG.F&(GB_BY)1 << cname)return (GB_BY)1; return (GB_BY)0;
 	}
 	bool isPause;
 	void Pause() {
@@ -99,6 +89,15 @@ public:
 	
 	void Init() {
 		InitOpCodeList();
+		_REG.PC = 0x100;
+		_REG.A = 0x01;
+		_REG.F = 0xB0;
+		_REG.C = 0x13;
+		_REG.E = 0xD8;
+		_REG.H = 0x01;
+		_REG.L = 0x4D;
+		_REG.SP = 0xFFFE;
+		_REG.IME = 1;
 	}
 	
 	void InitOpCodeList();

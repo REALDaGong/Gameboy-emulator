@@ -1,49 +1,60 @@
 #include "GB_GPU.h"
+//Does need to check LCDC switch first?
 void GPU::GPUStep() {
 	//CHECK BIT!
 #define Hb 0
 #define Vb 1
 #define OAM 2
 #define VRAM 3
-	switch (mode) {
+	line = &_Memory._memory_mapio[0x44];
+	mode = &_Memory._memory_mapio[0x41];
+	switch ((*mode)&0x3) {
 	case(Hb):
+		
 		if (_GPU_CLOCK >= 204) {
 			_GPU_CLOCK = 0;
-			line++;
-
-			if (line == 143)
+			(*line)++;
+			
+			if (*line == 143)
 			{
-				mode=(GB_BY)Vb;
-				//new frame;
+				*mode=(GB_BY)Vb;
+				//new frame
 			}
 			else {
-				mode=(GB_BY)OAM;
+				*mode=(GB_BY)OAM;
+				
 			}
 		}
 		break;
 	case(Vb):
+		
 		if (_GPU_CLOCK >= 456) {
 			_GPU_CLOCK = 0;
-			line++;
+			(*line)++;
+			
 			_Memory.MemoryWrite(IF, _Memory.MemoryRead(IF) | 0x1);
-			if (line > 153) {
-				mode=(GB_BY)OAM;
-				line = 0;
+			if (*line > 153) {
+				*mode=(GB_BY)OAM;
+				
+				*line = 0;
+				
 			}
 		}
 		break;
 	case(OAM):
+		
 		if (_GPU_CLOCK >= 80) {
 			_GPU_CLOCK = 0;
-			mode= (GB_BY)VRAM;
-
+			*mode= (GB_BY)VRAM;
+			
 		}
 		break;
 	case(VRAM):
+		
 		if (_GPU_CLOCK >= 172) {
 			_GPU_CLOCK = 0;
-			mode=(GB_BY)Hb;
-
+			*mode=(GB_BY)Hb;
+			
 			//new scanline
 		}
 	}
@@ -76,14 +87,14 @@ void GPU::Transfer(GB_BY Type,GB_BY MapNoSt,GB_BY TileSt,GB_BY Mask) {
 
 	}
 	for (int i = 0; i < 32; i++) {
-		GB_BY Place = TileSt + 16 * _Memory.MemoryRead(MapNoSt + line * 32 + i) + Mask;
+		GB_BY Place = TileSt + 16 * _Memory.MemoryRead(MapNoSt + *line * 32 + i) + Mask;
 		
 		for (int j = 0; j < 8; j++) {
 			GB_BY Byte1 = _Memory.MemoryRead(Place + j);
 			GB_BY Byte2 = _Memory.MemoryRead(Place+1 + j);
 			for (int k = 0; k < 8; k++) {
 
-				_Screen[(i + k+Xoffset)%256][(line + j+Yoffset)%256] = ((Byte1 >> (7-k)) & 1) + ((Byte2 >> (7-k)) & 1) * 2;
+				_Screen[(i + k+Xoffset)%256][(*line + j+Yoffset)%256] = ((Byte1 >> (7-k)) & 1) + ((Byte2 >> (7-k)) & 1) * 2;
 			}
 		}
 	}

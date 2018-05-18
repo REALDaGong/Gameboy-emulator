@@ -11,16 +11,16 @@ private:
 	Pixel _Screen[256][256];
 	Pixel _Window[256][256];
 	
-	int line;
+	GB_BY* line;
 	int NewFrameFlag;
-	GB_BY mode;
+	GB_BY* mode;
 
 	void Newline();
 	void NewFrame();
 	void UpgradeSprite();
 	void Transfer(GB_BY Type, GB_BY MapNoSt, GB_BY TileSt, GB_BY Mask);
 public:
-	GPU(Memory& memory):_Memory(memory) {};
+	GPU(Memory& memory) :_Memory(memory) {  };
 	~GPU() {};
 	void AddClock(GPU_CLOCK delta) { 
 		_GPU_CLOCK += delta;

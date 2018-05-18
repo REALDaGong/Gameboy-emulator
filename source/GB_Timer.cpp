@@ -1,17 +1,16 @@
 #include "GB_Timer.h"
 void Timer::TimerInc(GB_BY delta) {
-	;
 
-	if ((_Sub += delta) >= 16) {
-		_Main++;
-		_Sub -= 16;
-		_Div++;
-		if (_Div == 16) {
-			_Memory.MemoryWrite(DIV, (_Div + 1) & 255);
-			_Div = 0;
+		if ((_Sub += delta) >= 16) {
+			_Main++;
+			_Sub -= 16;
+			_Div++;
+			if (_Div == 16) {
+				*ptrDIV = (_Div + 1) & 255;
+				_Div = 0;
+			}
 		}
-	}
-	_TimerCheck();
+		_TimerCheck();
 }
 void Timer::_TimerCheck() {
 	int speed;
