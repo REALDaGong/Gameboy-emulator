@@ -41,4 +41,9 @@ private:
 	
 	GB_BY _memory_zero_ram[0x80];
 	
+	void KeyReset();
+	GB_BY KeyRead();
+	void KeyWrite(GB_BY val);
+	GB_BY _KeyCol;
+	GB_BY _KeyRow[2];
 };

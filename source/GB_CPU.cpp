@@ -26,7 +26,7 @@ void Z80::Step() {
 	_GPU.AddClock(delta);
 #ifdef _EARLY_TEST
 	static int a = 0;
-	if (_REG.PC == 0x34C || a == 1) {
+	if (_REG.PC == 0x2876 || a == 1) {
 		a = 1;
 		cout.fill('0');
 		cout.width(2);
@@ -371,7 +371,7 @@ void Z80::InitOpCodeList() {
 
 		SetFlag(FLAG_ZERO, 0);
 		SetFlag(FLAG_NEGA, 0);
-		SetFlag(FLAG_HACA, (_REG.SP^re^by) & 0x1000);
+		SetFlag(FLAG_HACA, (_REG.SP&0xFF)+by & 0x100);
 		SetFlag(FLAG_CARY, re & 0x10000);
 		_REG.SP += _Memory.MemoryRead(_REG.PC++);
 		return 16;
@@ -444,11 +444,11 @@ void Z80::InitOpCodeList() {
 	};//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 	  //CPL
 	  //flagf
-	OpCode[0x2F] = [&]()->int {SetFlag(FLAG_NEGA, 0); SetFlag(FLAG_HACA, 0); _REG.A = ~_REG.A; return 4; };
+	OpCode[0x2F] = [&]()->int {SetFlag(FLAG_NEGA, 1); SetFlag(FLAG_HACA, 1); _REG.A = ~_REG.A; return 4; };
 
 	//CCF
 	//flagf
-	OpCode[0x3F] = [&]()->int {SetFlag(FLAG_NEGA, 0); SetFlag(FLAG_HACA, 0); SetFlag(FLAG_CARY, GetFlag(FLAG_CARY)); return 4; };
+	OpCode[0x3F] = [&]()->int {SetFlag(FLAG_NEGA, 0); SetFlag(FLAG_HACA, 0); _REG.F^=0x01; return 4; };
 
 	//SCF
 	//flagf
@@ -681,26 +681,152 @@ void Z80::InitOpCodeList() {
 	//SET
 	//P109
 
-	CBOpCode[0xC7] = [&]()->int {_REG.A |= ((GB_BY)1 << _Memory.MemoryRead(_REG.PC++)); return 8; };
-	CBOpCode[0xC0] = [&]()->int {_REG.B |= ((GB_BY)1 << _Memory.MemoryRead(_REG.PC++)); return 8; };
-	CBOpCode[0xC1] = [&]()->int {_REG.C |= ((GB_BY)1 << _Memory.MemoryRead(_REG.PC++)); return 8; };
-	CBOpCode[0xC2] = [&]()->int {_REG.D |= ((GB_BY)1 << _Memory.MemoryRead(_REG.PC++)); return 8; };
-	CBOpCode[0xC3] = [&]()->int {_REG.E |= ((GB_BY)1 << _Memory.MemoryRead(_REG.PC++)); return 8; };
-	CBOpCode[0xC4] = [&]()->int {_REG.H |= ((GB_BY)1 << _Memory.MemoryRead(_REG.PC++)); return 8; };
-	CBOpCode[0xC5] = [&]()->int {_REG.L |= ((GB_BY)1 << _Memory.MemoryRead(_REG.PC++)); return 8; };
-	CBOpCode[0xC6] = [&]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, (_Memory.MemoryRead(_REG.H << 8 | _REG.L) | ((GB_BY)1 << _Memory.MemoryRead(_REG.PC++)))); return 16; };
+	CBOpCode[0xC7] = [|]()->int {_REG.A |=  ((GB_BY)1 << 0); return 8; };
+	CBOpCode[0xC0] = [|]()->int {_REG.B |=  ((GB_BY)1 << 0); return 8; };
+	CBOpCode[0xC1] = [|]()->int {_REG.C |=  ((GB_BY)1 << 0); return 8; };
+	CBOpCode[0xC2] = [|]()->int {_REG.D |=  ((GB_BY)1 << 0); return 8; };
+	CBOpCode[0xC3] = [|]()->int {_REG.E |=  ((GB_BY)1 << 0); return 8; };
+	CBOpCode[0xC4] = [|]()->int {_REG.H |=  ((GB_BY)1 << 0); return 8; };
+	CBOpCode[0xC5] = [|]()->int {_REG.L |=  ((GB_BY)1 << 0); return 8; };
+	CBOpCode[0xC6] = [|]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, (_Memory.MemoryRead(_REG.H << 8 | _REG.L) |  ((GB_BY)1 << 0))); return 16; };
+
+	CBOpCode[0xCF] = [|]()->int {_REG.A |=  ((GB_BY)1 << 1); return 8; };
+	CBOpCode[0xC8] = [|]()->int {_REG.B |=  ((GB_BY)1 << 1); return 8; };
+	CBOpCode[0xC9] = [|]()->int {_REG.C |=  ((GB_BY)1 << 1); return 8; };
+	CBOpCode[0xCA] = [|]()->int {_REG.D |=  ((GB_BY)1 << 1); return 8; };
+	CBOpCode[0xCB] = [|]()->int {_REG.E |=  ((GB_BY)1 << 1); return 8; };
+	CBOpCode[0xCC] = [|]()->int {_REG.H |=  ((GB_BY)1 << 1); return 8; };
+	CBOpCode[0xCD] = [|]()->int {_REG.L |=  ((GB_BY)1 << 1); return 8; };
+	CBOpCode[0xCE] = [|]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, (_Memory.MemoryRead(_REG.H << 8 | _REG.L) |  ((GB_BY)1 << 1))); return 16; };
+
+	CBOpCode[0xD7] = [|]()->int {_REG.A |=  ((GB_BY)1 << 2); return 8; };
+	CBOpCode[0xD0] = [|]()->int {_REG.B |=  ((GB_BY)1 << 2); return 8; };
+	CBOpCode[0xD1] = [|]()->int {_REG.C |=  ((GB_BY)1 << 2); return 8; };
+	CBOpCode[0xD2] = [|]()->int {_REG.D |=  ((GB_BY)1 << 2); return 8; };
+	CBOpCode[0xD3] = [|]()->int {_REG.E |=  ((GB_BY)1 << 2); return 8; };
+	CBOpCode[0xD4] = [|]()->int {_REG.H |=  ((GB_BY)1 << 2); return 8; };
+	CBOpCode[0xD5] = [|]()->int {_REG.L |=  ((GB_BY)1 << 2); return 8; };
+	CBOpCode[0xD6] = [|]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, (_Memory.MemoryRead(_REG.H << 8 | _REG.L) |  ((GB_BY)1 << 2))); return 16; };
+
+	CBOpCode[0xDF] = [|]()->int {_REG.A |=  ((GB_BY)1 << 3); return 8; };
+	CBOpCode[0xD8] = [|]()->int {_REG.B |=  ((GB_BY)1 << 3); return 8; };
+	CBOpCode[0xD9] = [|]()->int {_REG.C |=  ((GB_BY)1 << 3); return 8; };
+	CBOpCode[0xDA] = [|]()->int {_REG.D |=  ((GB_BY)1 << 3); return 8; };
+	CBOpCode[0xDB] = [|]()->int {_REG.E |=  ((GB_BY)1 << 3); return 8; };
+	CBOpCode[0xDC] = [|]()->int {_REG.H |=  ((GB_BY)1 << 3); return 8; };
+	CBOpCode[0xDD] = [|]()->int {_REG.L |=  ((GB_BY)1 << 3); return 8; };
+	CBOpCode[0xDE] = [|]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, (_Memory.MemoryRead(_REG.H << 8 | _REG.L) |  ((GB_BY)1 << 3))); return 16; };
+
+	CBOpCode[0xE7] = [|]()->int {_REG.A |=  ((GB_BY)1 << 4); return 8; };
+	CBOpCode[0xE0] = [|]()->int {_REG.B |=  ((GB_BY)1 << 4); return 8; };
+	CBOpCode[0xE1] = [|]()->int {_REG.C |=  ((GB_BY)1 << 4); return 8; };
+	CBOpCode[0xE2] = [|]()->int {_REG.D |=  ((GB_BY)1 << 4); return 8; };
+	CBOpCode[0xE3] = [|]()->int {_REG.E |=  ((GB_BY)1 << 4); return 8; };
+	CBOpCode[0xE4] = [|]()->int {_REG.H |=  ((GB_BY)1 << 4); return 8; };
+	CBOpCode[0xE5] = [|]()->int {_REG.L |=  ((GB_BY)1 << 4); return 8; };
+	CBOpCode[0xE6] = [|]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, (_Memory.MemoryRead(_REG.H << 8 | _REG.L) |  ((GB_BY)1 << 4))); return 16; };
+
+	CBOpCode[0xEF] = [|]()->int {_REG.A |=  ((GB_BY)1 << 5); return 8; };
+	CBOpCode[0xE8] = [|]()->int {_REG.B |=  ((GB_BY)1 << 5); return 8; };
+	CBOpCode[0xE9] = [|]()->int {_REG.C |=  ((GB_BY)1 << 5); return 8; };
+	CBOpCode[0xEA] = [|]()->int {_REG.D |=  ((GB_BY)1 << 5); return 8; };
+	CBOpCode[0xEB] = [|]()->int {_REG.E |=  ((GB_BY)1 << 5); return 8; };
+	CBOpCode[0xEC] = [|]()->int {_REG.H |=  ((GB_BY)1 << 5); return 8; };
+	CBOpCode[0xED] = [|]()->int {_REG.L |=  ((GB_BY)1 << 5); return 8; };
+	CBOpCode[0xEE] = [|]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, (_Memory.MemoryRead(_REG.H << 8 | _REG.L) |  ((GB_BY)1 << 5))); return 16; };
+
+	CBOpCode[0xF7] = [|]()->int {_REG.A |=  ((GB_BY)1 << 6); return 8; };
+	CBOpCode[0xF0] = [|]()->int {_REG.B |=  ((GB_BY)1 << 6); return 8; };
+	CBOpCode[0xF1] = [|]()->int {_REG.C |=  ((GB_BY)1 << 6); return 8; };
+	CBOpCode[0xF2] = [|]()->int {_REG.D |=  ((GB_BY)1 << 6); return 8; };
+	CBOpCode[0xF3] = [|]()->int {_REG.E |=  ((GB_BY)1 << 6); return 8; };
+	CBOpCode[0xF4] = [|]()->int {_REG.H |=  ((GB_BY)1 << 6); return 8; };
+	CBOpCode[0xF5] = [|]()->int {_REG.L |=  ((GB_BY)1 << 6); return 8; };
+	CBOpCode[0xF6] = [|]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, (_Memory.MemoryRead(_REG.H << 8 | _REG.L) |  ((GB_BY)1 << 6))); return 16; };
+
+	CBOpCode[0xFF] = [|]()->int {_REG.A |=  ((GB_BY)1 << 7); return 8; };
+	CBOpCode[0xF8] = [|]()->int {_REG.B |=  ((GB_BY)1 << 7); return 8; };
+	CBOpCode[0xF9] = [|]()->int {_REG.C |=  ((GB_BY)1 << 7); return 8; };
+	CBOpCode[0xFA] = [|]()->int {_REG.D |=  ((GB_BY)1 << 7); return 8; };
+	CBOpCode[0xFB] = [|]()->int {_REG.E |=  ((GB_BY)1 << 7); return 8; };
+	CBOpCode[0xFC] = [|]()->int {_REG.H |=  ((GB_BY)1 << 7); return 8; };
+	CBOpCode[0xFD] = [|]()->int {_REG.L |=  ((GB_BY)1 << 7); return 8; };
+	CBOpCode[0xFE] = [|]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, (_Memory.MemoryRead(_REG.H << 8 | _REG.L) |  ((GB_BY)1 << 7))); return 16; };
 
 	//RES
 	//P110
 
-	CBOpCode[0x87] = [&]()->int {_REG.A &= ~((GB_BY)1 << _Memory.MemoryRead(_REG.PC++)); return 8; };
-	CBOpCode[0x80] = [&]()->int {_REG.B &= ~((GB_BY)1 << _Memory.MemoryRead(_REG.PC++)); return 8; };
-	CBOpCode[0x81] = [&]()->int {_REG.C &= ~((GB_BY)1 << _Memory.MemoryRead(_REG.PC++)); return 8; };
-	CBOpCode[0x82] = [&]()->int {_REG.D &= ~((GB_BY)1 << _Memory.MemoryRead(_REG.PC++)); return 8; };
-	CBOpCode[0x83] = [&]()->int {_REG.E &= ~((GB_BY)1 << _Memory.MemoryRead(_REG.PC++)); return 8; };
-	CBOpCode[0x84] = [&]()->int {_REG.H &= ~((GB_BY)1 << _Memory.MemoryRead(_REG.PC++)); return 8; };
-	CBOpCode[0x85] = [&]()->int {_REG.L &= ~((GB_BY)1 << _Memory.MemoryRead(_REG.PC++)); return 8; };
-	CBOpCode[0x86] = [&]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, (_Memory.MemoryRead(_REG.H << 8 | _REG.L) & ~((GB_BY)1 << _Memory.MemoryRead(_REG.PC++)))); return 16; };
+	CBOpCode[0x87] = [&]()->int {_REG.A &= ~((GB_BY)1 << 0); return 8; };
+	CBOpCode[0x80] = [&]()->int {_REG.B &= ~((GB_BY)1 << 0); return 8; };
+	CBOpCode[0x81] = [&]()->int {_REG.C &= ~((GB_BY)1 << 0); return 8; };
+	CBOpCode[0x82] = [&]()->int {_REG.D &= ~((GB_BY)1 << 0); return 8; };
+	CBOpCode[0x83] = [&]()->int {_REG.E &= ~((GB_BY)1 << 0); return 8; };
+	CBOpCode[0x84] = [&]()->int {_REG.H &= ~((GB_BY)1 << 0); return 8; };
+	CBOpCode[0x85] = [&]()->int {_REG.L &= ~((GB_BY)1 << 0); return 8; };
+	CBOpCode[0x86] = [&]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, (_Memory.MemoryRead(_REG.H << 8 | _REG.L) & ~((GB_BY)1 <<0))); return 16; };
+
+	CBOpCode[0x8F] = [&]()->int {_REG.A &= ~((GB_BY)1 << 1); return 8; };
+	CBOpCode[0x88] = [&]()->int {_REG.B &= ~((GB_BY)1 << 1); return 8; };
+	CBOpCode[0x89] = [&]()->int {_REG.C &= ~((GB_BY)1 << 1); return 8; };
+	CBOpCode[0x8A] = [&]()->int {_REG.D &= ~((GB_BY)1 << 1); return 8; };
+	CBOpCode[0x8B] = [&]()->int {_REG.E &= ~((GB_BY)1 << 1); return 8; };
+	CBOpCode[0x8C] = [&]()->int {_REG.H &= ~((GB_BY)1 << 1); return 8; };
+	CBOpCode[0x8D] = [&]()->int {_REG.L &= ~((GB_BY)1 << 1); return 8; };
+	CBOpCode[0x8E] = [&]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, (_Memory.MemoryRead(_REG.H << 8 | _REG.L) & ~((GB_BY)1 << 1))); return 16; };
+
+	CBOpCode[0x97] = [&]()->int {_REG.A &= ~((GB_BY)1 << 2); return 8; };
+	CBOpCode[0x90] = [&]()->int {_REG.B &= ~((GB_BY)1 << 2); return 8; };
+	CBOpCode[0x91] = [&]()->int {_REG.C &= ~((GB_BY)1 << 2); return 8; };
+	CBOpCode[0x92] = [&]()->int {_REG.D &= ~((GB_BY)1 << 2); return 8; };
+	CBOpCode[0x93] = [&]()->int {_REG.E &= ~((GB_BY)1 << 2); return 8; };
+	CBOpCode[0x94] = [&]()->int {_REG.H &= ~((GB_BY)1 << 2); return 8; };
+	CBOpCode[0x95] = [&]()->int {_REG.L &= ~((GB_BY)1 << 2); return 8; };
+	CBOpCode[0x96] = [&]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, (_Memory.MemoryRead(_REG.H << 8 | _REG.L) & ~((GB_BY)1 << 2))); return 16; };
+
+	CBOpCode[0x9F] = [&]()->int {_REG.A &= ~((GB_BY)1 << 3); return 8; };
+	CBOpCode[0x98] = [&]()->int {_REG.B &= ~((GB_BY)1 << 3); return 8; };
+	CBOpCode[0x99] = [&]()->int {_REG.C &= ~((GB_BY)1 << 3); return 8; };
+	CBOpCode[0x9A] = [&]()->int {_REG.D &= ~((GB_BY)1 << 3); return 8; };
+	CBOpCode[0x9B] = [&]()->int {_REG.E &= ~((GB_BY)1 << 3); return 8; };
+	CBOpCode[0x9C] = [&]()->int {_REG.H &= ~((GB_BY)1 << 3); return 8; };
+	CBOpCode[0x9D] = [&]()->int {_REG.L &= ~((GB_BY)1 << 3); return 8; };
+	CBOpCode[0x9E] = [&]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, (_Memory.MemoryRead(_REG.H << 8 | _REG.L) & ~((GB_BY)1 << 3))); return 16; };
+
+	CBOpCode[0xA7] = [&]()->int {_REG.A &= ~((GB_BY)1 << 4); return 8; };
+	CBOpCode[0xA0] = [&]()->int {_REG.B &= ~((GB_BY)1 << 4); return 8; };
+	CBOpCode[0xA1] = [&]()->int {_REG.C &= ~((GB_BY)1 << 4); return 8; };
+	CBOpCode[0xA2] = [&]()->int {_REG.D &= ~((GB_BY)1 << 4); return 8; };
+	CBOpCode[0xA3] = [&]()->int {_REG.E &= ~((GB_BY)1 << 4); return 8; };
+	CBOpCode[0xA4] = [&]()->int {_REG.H &= ~((GB_BY)1 << 4); return 8; };
+	CBOpCode[0xA5] = [&]()->int {_REG.L &= ~((GB_BY)1 << 4); return 8; };
+	CBOpCode[0xA6] = [&]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, (_Memory.MemoryRead(_REG.H << 8 | _REG.L) & ~((GB_BY)1 << 4))); return 16; };
+
+	CBOpCode[0xAF] = [&]()->int {_REG.A &= ~((GB_BY)1 << 5); return 8; };
+	CBOpCode[0xA8] = [&]()->int {_REG.B &= ~((GB_BY)1 << 5); return 8; };
+	CBOpCode[0xA9] = [&]()->int {_REG.C &= ~((GB_BY)1 << 5); return 8; };
+	CBOpCode[0xAA] = [&]()->int {_REG.D &= ~((GB_BY)1 << 5); return 8; };
+	CBOpCode[0xAB] = [&]()->int {_REG.E &= ~((GB_BY)1 << 5); return 8; };
+	CBOpCode[0xAC] = [&]()->int {_REG.H &= ~((GB_BY)1 << 5); return 8; };
+	CBOpCode[0xAD] = [&]()->int {_REG.L &= ~((GB_BY)1 << 5); return 8; };
+	CBOpCode[0xAE] = [&]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, (_Memory.MemoryRead(_REG.H << 8 | _REG.L) & ~((GB_BY)1 << 5))); return 16; };
+
+	CBOpCode[0xB7] = [&]()->int {_REG.A &= ~((GB_BY)1 << 6); return 8; };
+	CBOpCode[0xB0] = [&]()->int {_REG.B &= ~((GB_BY)1 << 6); return 8; };
+	CBOpCode[0xB1] = [&]()->int {_REG.C &= ~((GB_BY)1 << 6); return 8; };
+	CBOpCode[0xB2] = [&]()->int {_REG.D &= ~((GB_BY)1 << 6); return 8; };
+	CBOpCode[0xB3] = [&]()->int {_REG.E &= ~((GB_BY)1 << 6); return 8; };
+	CBOpCode[0xB4] = [&]()->int {_REG.H &= ~((GB_BY)1 << 6); return 8; };
+	CBOpCode[0xB5] = [&]()->int {_REG.L &= ~((GB_BY)1 << 6); return 8; };
+	CBOpCode[0xB6] = [&]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, (_Memory.MemoryRead(_REG.H << 8 | _REG.L) & ~((GB_BY)1 << 6))); return 16; };
+
+	CBOpCode[0xBF] = [&]()->int {_REG.A &= ~((GB_BY)1 << 7); return 8; };
+	CBOpCode[0xB8] = [&]()->int {_REG.B &= ~((GB_BY)1 << 7); return 8; };
+	CBOpCode[0xB9] = [&]()->int {_REG.C &= ~((GB_BY)1 << 7); return 8; };
+	CBOpCode[0xBA] = [&]()->int {_REG.D &= ~((GB_BY)1 << 7); return 8; };
+	CBOpCode[0xBB] = [&]()->int {_REG.E &= ~((GB_BY)1 << 7); return 8; };
+	CBOpCode[0xBC] = [&]()->int {_REG.H &= ~((GB_BY)1 << 7); return 8; };
+	CBOpCode[0xBD] = [&]()->int {_REG.L &= ~((GB_BY)1 << 7); return 8; };
+	CBOpCode[0xBE] = [&]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, (_Memory.MemoryRead(_REG.H << 8 | _REG.L) & ~((GB_BY)1 << 7))); return 16; };
 
 	//JP
 	//p111
@@ -875,7 +1001,7 @@ inline void Z80::EXADD(GB_BY HREG, GB_BY LREG) {
 inline void Z80::SWAP(GB_BY &REG) {
 	GB_BY tmpl = REG & 0xF;
 	GB_BY tmph = REG & 0xF0;
-	REG = REG & 0 | tmph << 4 | tmpl;
+	REG = (REG & 0) | (tmph << 4) | tmpl;
 	SetFlag(FLAG_ZERO, REG == 0);
 	SetFlag(FLAG_NEGA, 0);
 	SetFlag(FLAG_HACA, 0);

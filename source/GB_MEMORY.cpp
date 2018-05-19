@@ -11,6 +11,7 @@ void Memory::LoadRom(std::string &dir) {
 #endif
 void Memory::Init() {
 	//_inbios = 1;
+	KeyReset();
 	_inbios = 0;
 	string dir;
 	LoadRom(dir);
@@ -78,7 +79,7 @@ GB_BY Memory::MemoryRead(GB_DB ad) {
 		else {
 			//Zero,IO
 			if ((ad & 0xFF) < 0x80) {
-
+				if (ad == 0xFF00)return KeyRead();
 				return _memory_mapio[ad & 0xFF];
 			}
 			else
@@ -128,6 +129,7 @@ void Memory::MemoryWrite(GB_DB ad, GB_BY val) {
 	case 0xF000:
 		if (ad == 0xFF00) {
 			MemoryWrite(IF, MemoryRead(IF) | 0x10);//input
+			KeyWrite(val);
 		}
 		if((ad&0xFFF)<0xE00)
 		_memory_working_ram[ad & 0x1FFF] = val;
@@ -164,3 +166,19 @@ void Memory::MemoryWrite(GB_DB ad, GB_BY val) {
 		
 }
 
+void Memory::KeyReset() {
+	_KeyCol = 0;
+	_KeyRow[0] = 0x0F;
+	_KeyRow[1] = 0x0F;
+}
+GB_BY Memory::KeyRead() {
+	if (_KeyCol == 0x10) {
+		return _KeyRow[0]|0xD0;
+	}
+	else if(_KeyCol==0x20){
+		return _KeyRow[1]|0xE0;
+	}return 0;
+}
+void Memory::KeyWrite(GB_BY val) {
+	_KeyCol = val & 0x30;
+}
