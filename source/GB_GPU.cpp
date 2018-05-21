@@ -31,8 +31,8 @@ void GPU::GPUStep() {
 		if (_GPU_CLOCK >= 456) {
 			_GPU_CLOCK = 0;
 			(*line)++;
-			
 			_Memory.MemoryWrite(IF, _Memory.MemoryRead(IF) | 0x1);
+			
 			if (*line > 153) {
 				*mode=(GB_BY)OAM;
 				
