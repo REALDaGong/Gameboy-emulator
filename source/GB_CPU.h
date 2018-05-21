@@ -48,6 +48,7 @@ private:
 	void LDHL();
 	
 	void ADD(GB_BY REG);
+	void ADDHL(GB_BY REGH, GB_BY REGL);
 	void ADC(GB_BY REG);
 	void SUB(GB_BY REG);
 	void SBC(GB_BY REG);

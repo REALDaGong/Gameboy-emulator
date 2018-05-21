@@ -1,9 +1,14 @@
 #include "GB_MEMORY.h"
-#define _EARLY_DEBUG
+#define _EARLY_DEBU
 #ifdef _EARLY_DEBUG
+#ifdef _EARLY_DEBUG
+extern int PAUSE;
+#include<conio.h>
+#endif // _EARLY_DEBUG
+
 void Memory::LoadRom(std::string &dir) {
 	//Load banks from ROM to rom bank0 and others
-	ifstream fin("E:\\gba\\Tetris.gb",ios_base::in| ios_base::binary);
+	ifstream fin("Tetris.gb",ios_base::in| ios_base::binary);
 	fin.read((char*)&_memory_rom_bank0, 0x4000);
 	fin.read((char*)&_memory_rom_other_bank, 0x4000);
 	fin.close();
@@ -91,10 +96,13 @@ GB_BY Memory::MemoryRead(GB_DB ad) {
 }
 
 void Memory::MemoryWrite(GB_DB ad, GB_BY val) {
-#ifdef _EARLY_DEBUG 
-	cout << hex << ad << "=" << (GB_DB)val<<endl;
+#ifdef _EARLY_DEBUG
+	//if (PAUSE==1)
+	//{
+		//cout << hex << ad << "=" << (GB_DB)val << endl;
+		//PAUSE = 1;
+	//}
 #endif // _EARLY_DEBUG 
-
 	switch (ad&0xF000) {
 	//bios
 	case 0x0000:
@@ -142,16 +150,8 @@ void Memory::MemoryWrite(GB_DB ad, GB_BY val) {
 				if (ad == DIV){_memory_mapio[ad & 0xFF] = 0; break;}
 				if (ad==LY){ _memory_mapio[ad & 0xFF] = 0; break; }
 				if (ad == DMA){
-					for (int i = 0; i < 14; i++) {
-						MemoryWrite(0xFE00 + i*8, MemoryRead(ad + i*7));
-						MemoryWrite(0xFE00 + i*8+1, MemoryRead(ad + i*7+1));
-						MemoryWrite(0xFE00 + i*8+2, MemoryRead(ad + i*7+2));
-						MemoryWrite(0xFE00 + i*8+3, (MemoryRead(ad + i*7+3)&0x0F)<<4);
-						//which bits should i take?
-						MemoryWrite(0xFE00 + i*8+4, (MemoryRead(ad + i*7+3)&0x0F));
-						MemoryWrite(0xFE00 + i*8+5, MemoryRead(ad + i*7+4));
-						MemoryWrite(0xFE00 + i*8+6, MemoryRead(ad + i*7+5));
-						MemoryWrite(0xFE00 + i*8+7, MemoryRead(ad + i*7+6));
+					for (int i = 0; i < 0xA0; i++) {
+						MemoryWrite(0xFE00+i, MemoryRead((val<<8) + i));
 					}
 					break;
 				}

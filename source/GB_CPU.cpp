@@ -6,8 +6,9 @@
 //?:i dont understand
 
 #include"GB_CPU.h"
-#define _EARLY_TEST
-#ifdef _EARLY_TEST
+#define _EARLY_DEBU
+#ifdef _EARLY_DEBUG
+extern int PAUSE;
 #include<conio.h>
 #include<iomanip>
 #endif // _EARLY_TEST
@@ -24,10 +25,11 @@ void Z80::Step() {
 	_Timer.TimerInc(delta);
 	//if (_Memory.MemoryRead(LCDC) & 0xF0)
 	_GPU.AddClock(delta);
-#ifdef _EARLY_TEST
-	static int a = 0;
-	if (_REG.PC == 0x350 || a == 1) {
-		a = 1;
+#ifdef _EARLY_DEBUG
+	static int time = 0;
+	if (0) {
+		
+		time++;
 		cout.fill('0');
 		cout.width(2);
 		cout << hex;
@@ -37,17 +39,24 @@ void Z80::Step() {
 		cout << "HL:" << setw(2) << (unsigned short)_REG.H << setw(2) << (unsigned short)_REG.L << endl;
 		cout << "SP:" << _REG.SP << endl;
 		cout << "PC:" << _REG.PC << endl;
-		cout << "------------------------" << endl;
-		_getch();
+		cout << "IME:" << (unsigned short)_REG.IME << endl;
+		cout << "------------------------" <<time<< endl;
+		getch();
+		//cout << "input." << endl;
 	}
 #endif 
-	if ((_Memory.MemoryRead(IE) & _Memory.MemoryRead(IF)) && _REG.IME) {
+	
+	if ((_Memory.MemoryRead(IE)&_Memory.MemoryRead(IF)) && _REG.IME) {
 		GB_BY IMEType = _Memory.MemoryRead(IE)&_Memory.MemoryRead(IF);
 		Interrupt(IMEType);
+			
 	}
+		
+	
+
 }
 void Z80::Interrupt(GB_BY IMEtype) {
-	_Memory.MemoryWrite(IF, 0);
+	_Memory.MemoryWrite(IF, _Memory.MemoryRead(IF)&(255 - IMEtype));
 	_REG.IME = 0;
 	if (IMEtype & 0x01) {
 
@@ -78,8 +87,7 @@ void Z80::Interrupt(GB_BY IMEtype) {
 						RST();
 						_REG.PC = 0x60;
 					}//transition from high to low of pin number p10-p13
-	_Timer.TimerInc(32);
-	//RETI
+	_Timer.TimerInc(16);
 }
 void Z80::InitOpCodeList() {
 	for (int i = 0; i < 0x100; i++) {
@@ -162,7 +170,7 @@ void Z80::InitOpCodeList() {
 	OpCode[0x0A] = [&]()->int {_REG.A = _Memory.MemoryRead(_REG.B << 8 | _REG.C); return 8; };
 	OpCode[0x1A] = [&]()->int {_REG.A = _Memory.MemoryRead(_REG.D << 8 | _REG.E); return 8; };
 	//0x7E
-	OpCode[0xFA] = [&]()->int {_REG.A = _Memory.MemoryRead(_REG.PC++); _REG.A = _Memory.MemoryRead(_REG.PC++); return 16; };//????
+	OpCode[0xFA] = [&]()->int {_REG.A = _Memory.MemoryRead(_Memory.MemoryRead(_REG.PC++)|_Memory.MemoryRead(_REG.PC++)<<8); return 16; };
 	OpCode[0x3E] = [&]()->int {_REG.A = _Memory.MemoryRead(_REG.PC++); return 8; };
 
 	//LD n,A
@@ -221,10 +229,10 @@ void Z80::InitOpCodeList() {
 	OpCode[0xD5] = [&]()->int {_Memory.MemoryWrite(_REG.SP--, _REG.D); _Memory.MemoryWrite(_REG.SP--, _REG.E); return 16; };
 	OpCode[0xE5] = [&]()->int {_Memory.MemoryWrite(_REG.SP--, _REG.H); _Memory.MemoryWrite(_REG.SP--, _REG.L); return 16; };
 	//POP nn
-	OpCode[0xF1] = [&]()->int {_REG.F = _Memory.MemoryRead(++_REG.SP); _REG.A = _Memory.MemoryRead(++_REG.SP); return 12; };
-	OpCode[0xC1] = [&]()->int {_REG.C = _Memory.MemoryRead(++_REG.SP); _REG.B = _Memory.MemoryRead(++_REG.SP); return 12; };
-	OpCode[0xD1] = [&]()->int {_REG.E = _Memory.MemoryRead(++_REG.SP); _REG.D = _Memory.MemoryRead(++_REG.SP); return 12; };
-	OpCode[0xE1] = [&]()->int {_REG.L = _Memory.MemoryRead(++_REG.SP); _REG.H = _Memory.MemoryRead(++_REG.SP); return 12; };//16bit bus?
+	OpCode[0xF1] = [&]()->int {_REG.F = _Memory.MemoryRead(++_REG.SP); _REG.A = _Memory.MemoryRead(++_REG.SP); return 16; };
+	OpCode[0xC1] = [&]()->int {_REG.C = _Memory.MemoryRead(++_REG.SP); _REG.B = _Memory.MemoryRead(++_REG.SP); return 16; };
+	OpCode[0xD1] = [&]()->int {_REG.E = _Memory.MemoryRead(++_REG.SP); _REG.D = _Memory.MemoryRead(++_REG.SP); return 16; };
+	OpCode[0xE1] = [&]()->int {_REG.L = _Memory.MemoryRead(++_REG.SP); _REG.H = _Memory.MemoryRead(++_REG.SP); return 16; };//16bit bus?
 	//ADD A,n
 	//p80
 	//flagf
@@ -356,10 +364,10 @@ void Z80::InitOpCodeList() {
 	//ADD HL,n
 	//p90
 	//flag
-	OpCode[0x09] = [&]()->int {(_REG.L^_REG.C & 0x80) == 0x80 ? _REG.H = _REG.H + _REG.B + 1 : _REG.H = _REG.H + _REG.B; _REG.L += _REG.C; return 8; };
-	OpCode[0x19] = [&]()->int {(_REG.L^_REG.E & 0x80) == 0x80 ? _REG.H = _REG.H + _REG.D + 1 : _REG.H = _REG.H + _REG.D; _REG.L += _REG.E; return 8; };
-	OpCode[0x29] = [&]()->int {(_REG.L^_REG.L & 0x80) == 0x80 ? _REG.H = _REG.H + _REG.H + 1 : _REG.H = _REG.H + _REG.H; _REG.L += _REG.L; return 8; };
-	OpCode[0x39] = [&]()->int {(_REG.L ^ (_REG.SP & 0xFF) & 0x80) == 0x80 ? _REG.H = _REG.H + (_REG.SP & 0xFF00) + 1 : _REG.H = _REG.H + (_REG.SP & 0xFF00); _REG.L += (_REG.SP & 0xFF); return 8; };
+	OpCode[0x09] = [&]()->int {ADDHL(_REG.B,_REG.C); return 8; };
+	OpCode[0x19] = [&]()->int {ADDHL(_REG.D, _REG.E); return 8; };
+	OpCode[0x29] = [&]()->int {ADDHL(_REG.H, _REG.L); return 8; };
+	OpCode[0x39] = [&]()->int {ADDHL((_REG.SP&0xFF00)>>8, _REG.SP&0xFF); return 8; };
 
 	//ADD SP.n
 	//p91
@@ -477,10 +485,11 @@ void Z80::InitOpCodeList() {
 	OpCode[0x07] = [&]()->int {
 		GB_BY by = 0x80 & _REG.A;
 		_REG.A <<= 1;
+		_REG.A |= by >> 7;
 		SetFlag(FLAG_ZERO, _REG.A == 0);
 		SetFlag(FLAG_NEGA, 0);
 		SetFlag(FLAG_HACA, 0);
-		SetFlag(FLAG_CARY, by & 0x80);
+		SetFlag(FLAG_CARY, by);
 		return 4;
 	};
 	//RLA
@@ -492,7 +501,7 @@ void Z80::InitOpCodeList() {
 		SetFlag(FLAG_ZERO, _REG.A == 0);
 		SetFlag(FLAG_NEGA, 0);
 		SetFlag(FLAG_HACA, 0);
-		SetFlag(FLAG_CARY, by & 0x80);
+		SetFlag(FLAG_CARY, by);
 		return 4;
 	};
 	//RRCA
@@ -500,10 +509,11 @@ void Z80::InitOpCodeList() {
 	OpCode[0x0F] = [&]()->int {
 		GB_BY by = 0x1 & _REG.A;
 		_REG.A >>= 1;
+		_REG.A |= by << 7;
 		SetFlag(FLAG_ZERO, _REG.A == 0);
 		SetFlag(FLAG_NEGA, 0);
 		SetFlag(FLAG_HACA, 0);
-		SetFlag(FLAG_CARY, by & 0x1);
+		SetFlag(FLAG_CARY, by);
 		return 4;
 	};
 	//RRA
@@ -832,56 +842,56 @@ void Z80::InitOpCodeList() {
 	//p111
 	OpCode[0xC3] = [&]()->int {JP(); return 12; };
 	//JP nz
-	OpCode[0xC2] = [&]()->int {if (!GetFlag(FLAG_ZERO)) { JP(); return 12; }_REG.PC += 2; return 12; };
+	OpCode[0xC2] = [&]()->int {if (!GetFlag(FLAG_ZERO)) { JP(); return 16; }_REG.PC += 2; return 12; };
 	//JP z
-	OpCode[0xCA] = [&]()->int {if (GetFlag(FLAG_ZERO)) { JP(); return 12; }_REG.PC += 2; return 12; };
+	OpCode[0xCA] = [&]()->int {if (GetFlag(FLAG_ZERO)) { JP(); return 16; }_REG.PC += 2; return 12; };
 	//JP nc
-	OpCode[0xD2] = [&]()->int {if (!GetFlag(FLAG_CARY)) { JP(); return 12; }_REG.PC += 2; return 12; };
+	OpCode[0xD2] = [&]()->int {if (!GetFlag(FLAG_CARY)) { JP(); return 16; }_REG.PC += 2; return 12; };
 	//JP c
-	OpCode[0xDA] = [&]()->int {if (GetFlag(FLAG_CARY)) { JP(); return 12; }_REG.PC += 2; return 12; };
+	OpCode[0xDA] = [&]()->int {if (GetFlag(FLAG_CARY)) { JP(); return 16; }_REG.PC += 2; return 12; };
 	//JP hl
 	OpCode[0xE9] = [&]()->int {_REG.PC = _REG.H << 8 | _REG.L; return 4; };
 	//JR n (signed!)
 	OpCode[0x18] = [&]()->int {_REG.PC += (__int8)_Memory.MemoryRead(_REG.PC); _REG.PC++; return 8; };
 	//JR nz(signed!)
-	OpCode[0x20] = [&]()->int {__int8 i = _Memory.MemoryRead(_REG.PC); _REG.PC++; if (!GetFlag(FLAG_ZERO)) { _REG.PC += (__int8)i; return 8; }return 8; };
+	OpCode[0x20] = [&]()->int {__int8 i = _Memory.MemoryRead(_REG.PC); _REG.PC++; if (!GetFlag(FLAG_ZERO)) { _REG.PC += (__int8)i; return 12; }return 8; };
 	//JR z(signed!)
-	OpCode[0x28] = [&]()->int {__int8 i = _Memory.MemoryRead(_REG.PC); _REG.PC++; if (GetFlag(FLAG_ZERO)) { _REG.PC += (__int8)i; return 8; }return 8; };
+	OpCode[0x28] = [&]()->int {__int8 i = _Memory.MemoryRead(_REG.PC); _REG.PC++; if (GetFlag(FLAG_ZERO)) { _REG.PC += (__int8)i; return 12; }return 8; };
 	//JR nc(signed!)
-	OpCode[0x30] = [&]()->int {__int8 i = _Memory.MemoryRead(_REG.PC); _REG.PC++; if (!GetFlag(FLAG_CARY)) { _REG.PC += (__int8)i; return 8; }return 8; };
+	OpCode[0x30] = [&]()->int {__int8 i = _Memory.MemoryRead(_REG.PC); _REG.PC++; if (!GetFlag(FLAG_CARY)) { _REG.PC += (__int8)i; return 12; }return 8; };
 	//JR c(signed!)
-	OpCode[0x38] = [&]()->int {__int8 i = _Memory.MemoryRead(_REG.PC); _REG.PC++; if (GetFlag(FLAG_CARY)) { _REG.PC += (__int8)i; return 8; }return 8; };
+	OpCode[0x38] = [&]()->int {__int8 i = _Memory.MemoryRead(_REG.PC); _REG.PC++; if (GetFlag(FLAG_CARY)) { _REG.PC += (__int8)i; return 12; }return 8; };
 
 	//CALL 
-	OpCode[0xCD] = [&]()->int {CALL();  return 12; };
+	OpCode[0xCD] = [&]()->int {CALL();  return 20; };
 	//CALL nz 
-	OpCode[0xC4] = [&]()->int {if (!GetFlag(FLAG_ZERO)) { CALL(); return 12; }return 12; };
+	OpCode[0xC4] = [&]()->int {if (!GetFlag(FLAG_ZERO)) { CALL(); return 24; }return 20; };
 	//CALL z
-	OpCode[0xCC] = [&]()->int {if (GetFlag(FLAG_ZERO)) { CALL();  return 12; }return 12; };
+	OpCode[0xCC] = [&]()->int {if (GetFlag(FLAG_ZERO)) { CALL();  return 24; }return 20; };
 	//CALL nc
-	OpCode[0xD4] = [&]()->int {if (!GetFlag(FLAG_CARY)) { CALL(); return 12; }return 12; };
+	OpCode[0xD4] = [&]()->int {if (!GetFlag(FLAG_CARY)) { CALL(); return 24; }return 20; };
 	//CALL c
-	OpCode[0xDC] = [&]()->int {if (GetFlag(FLAG_CARY)) { CALL(); return 12; } return 12; };
+	OpCode[0xDC] = [&]()->int {if (GetFlag(FLAG_CARY)) { CALL(); return 24; } return 20; };
 
 	//RST n
 	//p116
-	OpCode[0xC7] = [&]()->int {RST(); _REG.PC = 0; return 32; };
-	OpCode[0xCF] = [&]()->int {RST(); _REG.PC = 0x8; return 32; };
-	OpCode[0xD7] = [&]()->int {RST(); _REG.PC = 0x10; return 32; };
-	OpCode[0xDF] = [&]()->int {RST(); _REG.PC = 0x18; return 32; };
-	OpCode[0xE7] = [&]()->int {RST(); _REG.PC = 0x20; return 32; };
-	OpCode[0xEF] = [&]()->int {RST(); _REG.PC = 0x28; return 32; };
-	OpCode[0xF7] = [&]()->int {RST(); _REG.PC = 0x30; return 32; };
-	OpCode[0xFF] = [&]()->int {RST(); _REG.PC = 0x38; return 32; };
+	OpCode[0xC7] = [&]()->int {RST(); _REG.PC = 0; return 16; };
+	OpCode[0xCF] = [&]()->int {RST(); _REG.PC = 0x8; return 16; };
+	OpCode[0xD7] = [&]()->int {RST(); _REG.PC = 0x10; return 16; };
+	OpCode[0xDF] = [&]()->int {RST(); _REG.PC = 0x18; return 16; };
+	OpCode[0xE7] = [&]()->int {RST(); _REG.PC = 0x20; return 16; };
+	OpCode[0xEF] = [&]()->int {RST(); _REG.PC = 0x28; return 16; };
+	OpCode[0xF7] = [&]()->int {RST(); _REG.PC = 0x30; return 16; };
+	OpCode[0xFF] = [&]()->int {RST(); _REG.PC = 0x38; return 16; };
 	//imran said 12,man said 32
 	//RET
 	//p117
-	OpCode[0xC9] = [&]()->int {_REG.PC = _Memory.MemoryRead(_REG.SP + 1) | (_Memory.MemoryRead(_REG.SP + 2) << 8); _REG.SP += 2; return 8; };
+	OpCode[0xC9] = [&]()->int {_REG.PC = _Memory.MemoryRead(_REG.SP + 1) | (_Memory.MemoryRead(_REG.SP + 2) << 8); _REG.SP += 2; return 12; };
 	//RET cc
-	OpCode[0xC0] = [&]()->int {if (!GetFlag(FLAG_ZERO)) { return OpCode[0xC9](); }return 8; };
-	OpCode[0xC8] = [&]()->int {if (GetFlag(FLAG_ZERO)) { return OpCode[0xC9](); }return 8; };
-	OpCode[0xD0] = [&]()->int {if (!GetFlag(FLAG_CARY)) { return OpCode[0xC9](); }return 8; };
-	OpCode[0xD8] = [&]()->int {if (GetFlag(FLAG_CARY)) { return OpCode[0xC9](); }return 8; };
+	OpCode[0xC0] = [&]()->int {if (!GetFlag(FLAG_ZERO)) { return OpCode[0xC9](); }return 12; };
+	OpCode[0xC8] = [&]()->int {if (GetFlag(FLAG_ZERO)) { return OpCode[0xC9](); }return 12; };
+	OpCode[0xD0] = [&]()->int {if (!GetFlag(FLAG_CARY)) { return OpCode[0xC9](); }return 12; };
+	OpCode[0xD8] = [&]()->int {if (GetFlag(FLAG_CARY)) { return OpCode[0xC9](); }return 12; };
 	//RETI
 	OpCode[0xD9] = [&]()->int {OpCode[0xC9](); _REG.IME = 1; return 12; };
 	//imran said it will consume 12 cycles,but man said 8.
@@ -915,6 +925,14 @@ inline void Z80::ADD(GB_BY REG) {
 	SetFlag(FLAG_CARY, (re & 0x100)>>8);
 	_REG.A = re & 0xFF;
 
+}
+inline void Z80::ADDHL(GB_BY REGH,GB_BY REGL) {
+	uint32_t re = ((_REG.H + REGH) << 8) + _REG.L + REGL;
+	SetFlag(FLAG_NEGA, 0);
+	SetFlag(FLAG_HACA, ((_REG.H & 0x0F) + (REGH & 0x0F)) & 0x10);
+	SetFlag(FLAG_CARY, (re & 0x10000) >> 16);
+	_REG.H = (re & 0xFF00)>>8;
+	_REG.L = re & 0xFF;
 }
 inline void Z80::ADC(GB_BY REG) {
 	SetFlag(FLAG_NEGA, 0);
@@ -1012,6 +1030,7 @@ inline void Z80::SWAP(GB_BY &REG) {
 inline void Z80::RLC(GB_BY &REG) {
 	GB_BY by = 0x80 & REG;
 	REG <<= 1;
+	REG |= by >> 7;
 	SetFlag(FLAG_ZERO, REG == 0);
 	SetFlag(FLAG_NEGA, 0);
 	SetFlag(FLAG_HACA, 0);
@@ -1031,6 +1050,7 @@ inline void Z80::RL(GB_BY &REG) {
 inline void Z80::RRC(GB_BY &REG) {
 	GB_BY by = 0x1 & REG;
 	REG >>= 1;
+	REG |= by << 7;
 	SetFlag(FLAG_ZERO, REG == 0);
 	SetFlag(FLAG_NEGA, 0);
 	SetFlag(FLAG_HACA, 0);
@@ -1085,7 +1105,6 @@ inline void Z80::RST() {
 	_Memory.MemoryWrite(_REG.SP, (_REG.PC >> 8) & 0xFF);
 	_Memory.MemoryWrite(_REG.SP - 1, _REG.PC & 0xFF);
 	_REG.SP -= 2;
-	_REG.IME = 0;
 }
 inline void Z80::JP() {
 	_REG.PC = _Memory.MemoryRead(_REG.PC) | _Memory.MemoryRead(_REG.PC + 1) << 8;
