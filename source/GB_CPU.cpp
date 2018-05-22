@@ -6,7 +6,7 @@
 //?:i dont understand
 
 #include"GB_CPU.h"
-#define _EARLY_DEBU
+#define _EARLY_DEBUG
 #ifdef _EARLY_DEBUG
 extern int PAUSE;
 #include<conio.h>
@@ -27,7 +27,7 @@ void Z80::Step() {
 	_GPU.AddClock(delta);
 #ifdef _EARLY_DEBUG
 	static int time = 0;
-	if (0) {
+	if (_REG.PC==0x999991) {
 		
 		time++;
 		cout.fill('0');
@@ -41,7 +41,7 @@ void Z80::Step() {
 		cout << "PC:" << _REG.PC << endl;
 		cout << "IME:" << (unsigned short)_REG.IME << endl;
 		cout << "------------------------" <<time<< endl;
-		getch();
+		//getch();
 		//cout << "input." << endl;
 	}
 #endif 
