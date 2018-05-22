@@ -5,7 +5,7 @@
 extern int PAUSE;
 #include<conio.h>
 #endif // _EARLY_DEBUG
-
+#endif
 void Memory::LoadRom(std::string &dir) {
 	//Load banks from ROM to rom bank0 and others
 	ifstream fin("Tetris.gb",ios_base::in| ios_base::binary);
@@ -13,7 +13,6 @@ void Memory::LoadRom(std::string &dir) {
 	fin.read((char*)&_memory_rom_other_bank, 0x4000);
 	fin.close();
 }
-#endif
 void Memory::Init() {
 	//_inbios = 1;
 	KeyReset();

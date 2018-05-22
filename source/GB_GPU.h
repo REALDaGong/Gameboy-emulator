@@ -8,7 +8,7 @@ private:
 	GPU_CLOCK _GPU_CLOCK;
 	void GPUStep();
 	Memory& _Memory;
-	Pixel _Screen[256][256];
+	
 	Pixel _Window[256][256];
 	
 	GB_BY* line;
@@ -18,8 +18,9 @@ private:
 	void Newline();
 	void NewFrame();
 	void UpgradeSprite();
-	void Transfer(GB_BY Type, GB_BY MapNoSt, GB_BY TileSt, GB_BY Mask);
+	void Transfer(GB_BY Type, GB_DB MapNoSt, GB_DB TileSt, GB_BY Mask);
 public:
+	Pixel _Screen[256][256];
 	GPU(Memory& memory) :_Memory(memory) {  };
 	~GPU() {};
 	void AddClock(GPU_CLOCK delta) { 
