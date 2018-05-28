@@ -8,7 +8,10 @@ extern int PAUSE;
 #endif
 void Memory::LoadRom(std::string &dir) {
 	//Load banks from ROM to rom bank0 and others
-	ifstream fin("Tetris.gb",ios_base::in| ios_base::binary);
+	//ifstream fin("E:\\dr gb\\gbtests\\cpu_instrs\\individual\\09-op r,r.gb",ios_base::in| ios_base::binary);
+	//ifstream fin("E:\\dr gb\\gbtests\\cpu_instrs\\cpu_instrs.gb", ios_base::in | ios_base::binary);
+
+	ifstream fin("Tetris.gb", ios_base::in | ios_base::binary);
 	fin.read((char*)&_memory_rom_bank0, 0x4000);
 	fin.read((char*)&_memory_rom_other_bank, 0x4000);
 	fin.close();
@@ -32,6 +35,11 @@ void Memory::Init() {
 	MemoryWrite(WY, (GB_BY)0);
 	MemoryWrite(WX, (GB_BY)0);
 	MemoryWrite(IE, (GB_BY)0);
+
+	//MemoryWrite(STAT, (GB_BY)0x81);
+	//MemoryWrite(IF, (GB_BY)0xE1);
+	MemoryWrite(0xFF4D, 0x7E);
+	//_memory_mapio[0x44] = 0x90;
 }
 GB_BY Memory::MemoryRead(GB_DB ad) {
 
@@ -84,6 +92,7 @@ GB_BY Memory::MemoryRead(GB_DB ad) {
 			//Zero,IO
 			if ((ad & 0xFF) < 0x80) {
 				if (ad == 0xFF00)return KeyRead();
+
 				return _memory_mapio[ad & 0xFF];
 			}
 			else
@@ -148,12 +157,24 @@ void Memory::MemoryWrite(GB_DB ad, GB_BY val) {
 			if ((ad & 0xFF) < 0x80) {
 				if (ad == DIV){_memory_mapio[ad & 0xFF] = 0; break;}
 				if (ad==LY){ _memory_mapio[ad & 0xFF] = 0; break; }
+				if (ad == 0xFF4D) {
+					_memory_mapio[ad & 0xFF] = val == 1 ? 0x7F : 0x7E;
+				}
+				if (ad == LCDC) {
+					_memory_mapio[ad & 0xFF] = val;
+					if (!(val & 0x80)) {
+						_memory_mapio[0x44] = 0;
+						_memory_mapio[0x41] = 0x80;
+						break;
+					}
+				}
 				if (ad == DMA){
 					for (int i = 0; i < 0xA0; i++) {
 						MemoryWrite(0xFE00+i, MemoryRead((val<<8) + i));
 					}
 					break;
 				}
+				
 				_memory_mapio[ad&0xFF] = val;
 			}
 			else

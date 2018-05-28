@@ -4,6 +4,7 @@
 #define DEBUG
 #ifdef DEBUG
 void DrawPicture();
+void Key(char a);
 #endif // DEBUG
 
 int PAUSE=0;
@@ -18,28 +19,36 @@ int main() {
 }
 
 int Gameloop() {
+	char a;
 	//freopen("out.txt","w",stdout);
-	for (int i=0;i<0x2000000;i++) {
+	//PAUSE = 0;
+	for (int i=0;i<0x1c27000;i++) {
+		//if (kbhit()) {
+		//	a = getch();
+		//	Key(a);
+		//}
 		cpu.Step();
-		
 	}
-	//DrawPicture();
-	cout << "1";
-	for (int i = 0; i<0x2000000; i++) {
+	//PAUSE = 1;
+	for (int i = 0; i<0x1c56000; i++) {
+		//if (kbhit()) {
+		//	a = getch();
+		//	Key(a);
+		//}
 		cpu.Step();
-
 	}
-	
+	DrawPicture();
+	//fclose(stdout);
 	return 0;
-
 }
 #ifdef DEBUG
 void DrawPicture() {
-	fstream out("out.ppm",ios_base::out|ios_base::binary);
+	cout << "drawed.";
+	fstream out("out_indiv.ppm",ios_base::out|ios_base::binary);
 	
 	
 	out << "P6 256 256 255" << endl;
-	unsigned char color[4] = {0,85,170,255};
+	unsigned char color[8] = {0,85,170,255,0,85,170,255};
 	for (int i = 0; i < 256; i++) {
 		for (int j = 0; j < 256; j++) {
 			out.write((char*)&color[gpu._Screen[j][i]], 1);
@@ -49,6 +58,29 @@ void DrawPicture() {
 	}
 	
 	out.close();
+}
+void Key(char a) {
+	switch (a)
+	{
+	case 'i'://up
+		break;
+	case 'k'://down
+		break;
+	case 'j'://left
+		break;
+	case 'l'://right
+		break;
+	case 'z'://a
+		break;
+	case 'x'://b
+		break;
+	case 'q'://select
+		break;
+	case 'w'://back
+		break;
+	default:
+		break;
+	}
 }
 #endif // DEBUG
 

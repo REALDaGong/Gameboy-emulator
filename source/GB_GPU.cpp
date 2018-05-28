@@ -6,55 +6,66 @@ void GPU::GPUStep() {
 #define Vb 1
 #define OAM 2
 #define VRAM 3
-	line = &_Memory._memory_mapio[0x44];
-	mode = &_Memory._memory_mapio[0x41];
+	
 	switch ((*mode)&0x3) {
 	case(Hb):
-		
+		CheckModeInter(Hb);
 		if (_GPU_CLOCK >= 204) {
 			_GPU_CLOCK = 0;
 			(*line)++;
+			CheckLCDCCoincidenceInter();
 			
 			if (*line == 143)
 			{
-				*mode=(GB_BY)Vb;
+				
+				_Memory.MemoryWrite(IF, _Memory.MemoryRead(IF) | 0x1);
+				_Memory._memory_mapio[STAT - 0xFF00] &= 0xFC;
+				_Memory._memory_mapio[STAT - 0xFF00] += Vb;
 				NewFrame();
+				
 				//new frame
 			}
 			else {
-				*mode=(GB_BY)OAM;
 				
+				_Memory._memory_mapio[STAT - 0xFF00] &= 0xFC;
+				_Memory._memory_mapio[STAT - 0xFF00] += OAM;
 			}
 		}
 		break;
 	case(Vb):
-		
+		CheckModeInter(Vb);
 		if (_GPU_CLOCK >= 456) {
 			_GPU_CLOCK = 0;
 			(*line)++;
-			_Memory.MemoryWrite(IF, _Memory.MemoryRead(IF) | 0x1);
+			CheckLCDCCoincidenceInter();
+			
+			
 			
 			if (*line > 153) {
-				*mode=(GB_BY)OAM;
 				
+				_Memory._memory_mapio[STAT - 0xFF00] &= 0xFC;
+				_Memory._memory_mapio[STAT - 0xFF00] += OAM;
 				*line = 0;
+				CheckLCDCCoincidenceInter();
 				
 			}
 		}
 		break;
 	case(OAM):
-		
+		CheckModeInter(OAM);
 		if (_GPU_CLOCK >= 80) {
 			_GPU_CLOCK = 0;
-			*mode= (GB_BY)VRAM;
 			
+			_Memory._memory_mapio[STAT - 0xFF00] &= 0xFC;
+			_Memory._memory_mapio[STAT - 0xFF00] += VRAM;
 		}
 		break;
 	case(VRAM):
-		
 		if (_GPU_CLOCK >= 172) {
 			_GPU_CLOCK = 0;
-			*mode=(GB_BY)Hb;
+			
+			_Memory._memory_mapio[STAT - 0xFF00] &= 0xFC;
+			_Memory._memory_mapio[STAT - 0xFF00] += Hb;
 			if((((*line)-1)%8)==0)
 			Newline();
 			//new scanline
@@ -96,8 +107,8 @@ void GPU::Transfer(GB_BY Type,GB_DB MapNoSt,GB_DB TileSt,GB_BY Mask) {
 			GB_BY Byte1 = _Memory.MemoryRead(Place + j*2);
 			GB_BY Byte2 = _Memory.MemoryRead(Place+1 + j*2);
 			for (int k = 0; k < 8; k++) {
-
-				_Screen[(i*8 + k+Xoffset)%256][(*line + j+Yoffset)%256] = ((Byte1 >> (7-k)) & 1) + ((Byte2 >> (7-k)) & 1) * 2;
+				_Screen[(i*8 + k)][(*line + j)] = (_Memory.MemoryRead(BGP)>>(2*(((Byte1 >> (7 - k)) & 1) + ((Byte2 >> (7 - k)) & 1) * 2)))&3;
+			
 			}
 		}
 	}
@@ -107,16 +118,9 @@ void GPU::Transfer(GB_BY Type,GB_DB MapNoSt,GB_DB TileSt,GB_BY Mask) {
 //initial a frame without taking X and Y offset into consideration.
 //havn't merge bg,wn and sp together.
 void GPU::UpgradeSprite() {
-	memset(_Window, -1, sizeof(_Window));
+	memset(_Sprite, -1, sizeof(_Sprite));//-1 means sprite layer is empty.
 	GB_BY mode8x16 = (_Memory.MemoryRead(LCDC) >> 2) & 1;
-	struct Sprite {
-		GB_BY X, Y, No;
-		GB_BY pirority;
-		GB_BY Xfilp, Yfilp;
-		GB_BY PlaNo;
-		GB_BY isRender;
-	}sprite[40];
-	Sprite *ptrSprite[40] = {0};
+	
 	memset(sprite, 0, sizeof(sprite));
 	GB_BY Rendersize = 0;
 	for (int i = 0; i < 40; i++) {
@@ -139,6 +143,7 @@ void GPU::UpgradeSprite() {
 		
 	}
 	//sort them,the first will be rendered first,meaning lowest priority. 
+	
 	for (int j = 0; j < Rendersize-1; j++) {
 		for (int i = 0; i < Rendersize-1; i++) {
 
@@ -159,7 +164,9 @@ void GPU::UpgradeSprite() {
 			}
 		}
 	}
+	//i can use less<> if i want.but i dont.
 	//transfer data to pics
+	//miss the proper process on flip and prority.
 	GB_BY PicSize = mode8x16 ? 16 : 8;
 	for (int i = 0; i < 40;i++) {
 		if (ptrSprite[i]) {
@@ -168,29 +175,44 @@ void GPU::UpgradeSprite() {
 				GB_BY byte1 = _Memory.MemoryRead(Place + 2*k);
 				GB_BY byte2 = _Memory.MemoryRead(Place + 2*k+1);
 				for (int j = 0; j < 8; j++) {
-					_Window[(j + ptrSprite[i]->X) % 256][(k + ptrSprite[i]->Y) % 256] = ((byte1 >> (7 - j)) & 1) + ((byte2 >> (7 - j)) & 1) * 2 + ((ptrSprite[i]->PlaNo) << 2);
+					_Sprite[(j + ptrSprite[i]->X) % 256][(k + ptrSprite[i]->Y) % 256] = (_Memory.MemoryRead((ptrSprite[i]->PlaNo)+0xFF48)
+																				>>(2*(((byte1 >> (7 - j)) & 1) + ((byte2 >> (7 - j)) & 1) * 2)))&3;
 				}
 			}
+			continue;
 		}
+		break;
 	}
 }
 //didnt limit the sprites number per line.
 void GPU::NewFrame() {
 	UpgradeSprite();
-	GB_BY obp1 = _Memory.MemoryRead(OBP1);
-	GB_BY obp0 = _Memory.MemoryRead(OBP0);
 	//[X][Y]
 	for (int i = 0; i < 256; i++) {
 		for (int j = 0; j < 256; j++) {
-			if (_Screen[i][j] == 0 && _Window[i][j] != 255) {
-				_Screen[i][j] = _Window[i][j] > 3 ? (obp1 >> 2*(_Window[i][j] - 4)) & 3 : (obp0 >> 2*_Window[i][j]) & 3;
+			if (_Screen[i][j] == 0 && _Sprite[i][j] != 255) {
+				_Screen[i][j] = _Sprite[i][j];
 			}
 			else {
-
+				
 			}
 		}
 	}
 	SetNewFrameFlag(1);
 	//do it!
 	//merge them!!!!;
+}
+inline void GPU::CheckLCDCCoincidenceInter() {
+	if (_Memory._memory_mapio[LYC-0xFF00] == _Memory._memory_mapio[LY - 0xFF00]) {
+		_Memory._memory_mapio[STAT - 0xFF00] |= 0x4;
+	}
+	else {
+		_Memory._memory_mapio[STAT - 0xFF00] &= 0xFB;
+	}
+	if ((_Memory._memory_mapio[STAT - 0xFF00] & 0x4) && (_Memory._memory_mapio[STAT - 0xFF00] & 64)) {
+		_Memory.MemoryWrite(IF, _Memory.MemoryRead(0xFFFF) | 0x2);
+	}
+}
+inline void GPU::CheckModeInter(GB_BY Mode) {
+	if(_Memory._memory_mapio[STAT - 0xFF00]>>(Mode+3)&1)_Memory.MemoryWrite(IF,_Memory.MemoryRead(0xFFFF)|0x2);
 }
