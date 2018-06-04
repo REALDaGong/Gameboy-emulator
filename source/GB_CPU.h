@@ -7,7 +7,7 @@
 #define FLAG_NEGA 6//sub
 #define FLAG_HACA 5
 #define FLAG_CARY 4
-
+#define DEBUGGER
 
 class Z80 {
 private:
@@ -85,20 +85,35 @@ private:
 public:
 	explicit Z80(Memory& memory, GPU& GPU, Timer& Timer) :_Memory(memory), _GPU(GPU), _Timer(Timer){ Init(); };
 	~Z80() {};
-	
-	void Step();
-	
+
+	void Step();	
 	void Init() {
 		InitOpCodeList();
 		_REG.PC = 0x100;
+#ifdef DEBUGGER
+		_REG.A = 0x11;
+		_REG.F = 0x80;
+		_REG.D = 0xFF;
+		_REG.E = 0x56;
+		_REG.H = 0x00;
+		_REG.L = 0xD;
+		_REG.SP = 0xFFFE;
+		_REG.IME = 0;
+#endif // DEBUGGER
+#ifndef DEBUGGER
+		
 		_REG.A = 0x01;
 		_REG.F = 0xB0;
+		_REG.B = 0x0;
 		_REG.C = 0x13;
+		_REG.D = 0;
 		_REG.E = 0xD8;
 		_REG.H = 0x01;
 		_REG.L = 0x4D;
 		_REG.SP = 0xFFFE;
 		_REG.IME = 1;
+		
+#endif 
 	}
 	
 	void InitOpCodeList();
