@@ -78,5 +78,6 @@ typedef uint8_t GB_BY;
 #define IE 0xFFFF
 
 
-
+#define SCREEN_MAX_X 160
+#define SCREEN_MAX_Y 144
 

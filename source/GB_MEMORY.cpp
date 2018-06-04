@@ -6,22 +6,27 @@ extern int PAUSE;
 #include<conio.h>
 #endif // _EARLY_DEBUG
 #endif
-void Memory::LoadRom(std::string &dir) {
+void Memory::LoadRom(const char* dir) {
 	//Load banks from ROM to rom bank0 and others
-	//ifstream fin("E:\\dr gb\\gbtests\\cpu_instrs\\individual\\09-op r,r.gb",ios_base::in| ios_base::binary);
-	//ifstream fin("E:\\dr gb\\gbtests\\cpu_instrs\\cpu_instrs.gb", ios_base::in | ios_base::binary);
-
-	ifstream fin("Tetris.gb", ios_base::in | ios_base::binary);
+	ifstream fin(dir,ios_base::in| ios_base::binary);
 	fin.read((char*)&_memory_rom_bank0, 0x4000);
 	fin.read((char*)&_memory_rom_other_bank, 0x4000);
 	fin.close();
+	
 }
 void Memory::Init() {
 	//_inbios = 1;
+	memset(_memory_exteral_ram, 0, sizeof(_memory_exteral_ram));
+	memset(_memory_graphics_ram, 0, sizeof(_memory_graphics_ram));
+	memset(_memory_working_ram, 0, sizeof(_memory_working_ram));
+	memset(_memory_mapio, 0, sizeof(_memory_mapio));
+	memset(_memory_oam, 0, sizeof(_memory_oam));
+	memset(_memory_zero_ram, 0, sizeof(_memory_zero_ram));
+	
 	KeyReset();
 	_inbios = 0;
-	string dir;
-	LoadRom(dir);
+	//string dir;
+	//LoadRom(dir);
 	MemoryWrite(TIMA, (GB_BY)0);
 	MemoryWrite(TAC, (GB_BY)0);
 	MemoryWrite(TMA, (GB_BY)0);
@@ -36,10 +41,10 @@ void Memory::Init() {
 	MemoryWrite(WX, (GB_BY)0);
 	MemoryWrite(IE, (GB_BY)0);
 
-	//MemoryWrite(STAT, (GB_BY)0x81);
-	//MemoryWrite(IF, (GB_BY)0xE1);
+	MemoryWrite(STAT, (GB_BY)0x81);
+	MemoryWrite(IF, (GB_BY)0xE1);
 	MemoryWrite(0xFF4D, 0x7E);
-	//_memory_mapio[0x44] = 0x90;
+	_memory_mapio[0x44] = 0x90;
 }
 GB_BY Memory::MemoryRead(GB_DB ad) {
 
@@ -129,6 +134,9 @@ void Memory::MemoryWrite(GB_DB ad, GB_BY val) {
 	case 0x8000:
 	case 0x9000:
 		_memory_graphics_ram[ad & 0x1FFF] = val;
+		if (ad <= 0x97FF) {
+			UpdateTile(ad);
+		}
 		break;
 	//Ex RAM
 	case 0xA000:
@@ -201,4 +209,15 @@ GB_BY Memory::KeyRead() {
 }
 void Memory::KeyWrite(GB_BY val) {
 	_KeyCol = val & 0x30;
+}
+void Memory::UpdateTile(GB_DB ad) {
+	GB_DB TileNo = (ad - 0x8000) / 16;
+
+	for (int i = 0; i < 8; i++) {
+		GB_BY Byte1 = _memory_graphics_ram[TileNo * 16 + i * 2];
+		GB_BY Byte2 = _memory_graphics_ram[TileNo * 16 + i * 2 + 1];
+		for (int j = 0; j < 8; j++) {
+			TileSet[TileNo][j][i] = (MemoryRead(BGP) >> (2 * (((Byte1 >> (7 - j)) & 1) + ((Byte2 >> (7 - j)) & 1) * 2))) & 3;
+		}
+	}
 }

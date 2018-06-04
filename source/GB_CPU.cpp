@@ -19,16 +19,19 @@ array<function<int()>, 0x100 * sizeof(int)> OpCode;
 array<function<int()>, 0x100 * sizeof(int)> CBOpCode;
 
 void Z80::Step() {
-	if (!isPause) {
+	if (1) {
+		
 		GB_BY Op = _Memory.MemoryRead(_REG.PC++);
 		GB_BY delta = (GB_BY)OpCode[Op]();
 		_Timer.TimerInc(delta);
 		_GPU.AddClock(delta);
+		
 #ifdef _EARLY_DEBUG
 		static int time = 0;
+		time++;
 		if (0) {
 			
-			time++;
+			
 			cout.fill('0');
 			cout.width(2);
 			cout << hex;
@@ -44,12 +47,11 @@ void Z80::Step() {
 			cout << "FF83:" << setw(2) <<(unsigned short)_Memory.MemoryRead(0xFF83) << endl;
 			cout << "------------------------" << time << endl;
 			
-			//cout << "input." << endl;
+			
 		}
 #endif 
 	}
 	else {
-		_Timer.TimerInc(4);
 		_GPU.AddClock(4);
 	}
 	if ((_Memory.MemoryRead(IE)&_Memory.MemoryRead(IF)) && _REG.IME) {
@@ -1136,4 +1138,3 @@ inline void Z80::CALL() {
 	
 	_REG.PC = _Memory.MemoryRead(_REG.PC) | _Memory.MemoryRead(_REG.PC + 1) << 8;
 }
-
