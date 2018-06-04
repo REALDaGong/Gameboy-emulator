@@ -7,9 +7,11 @@ public:
 	GB_BY MemoryRead(GB_DB ad);
 	void MemoryWrite(GB_DB ad, GB_BY v);
 	void Init();
-	void LoadRom(std::string &dir);
+	void LoadRom(const char* dir);
 	GB_BY _memory_mapio[0x80];
 	GB_BY _inbios;
+	GB_BY _KeyRow[2];
+	GB_BY TileSet[384][8][8];
 private:
 		
 	const GB_BY _memory_bios[0x101]={ 
@@ -45,5 +47,5 @@ private:
 	GB_BY KeyRead();
 	void KeyWrite(GB_BY val);
 	GB_BY _KeyCol;
-	GB_BY _KeyRow[2];
+	void UpdateTile(GB_DB ad);
 };
