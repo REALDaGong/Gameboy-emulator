@@ -20,13 +20,15 @@
 typedef uint8_t KEYNAME;
 typedef uint8_t KEYMOVE;
 
-Memory memory;
-Timer timer(memory);
-GPU gpu(memory);
-Z80 cpu(memory, gpu, timer);
+namespace GBCore {
 
+	Memory memory;
+	Timer timer(memory);
+	GPU gpu(memory);
+	Z80 cpu(memory, gpu, timer);
+}
 
-const GB_BY(*const GameBoyScreen)[SCREEN_MAX_Y] = gpu._Screen;
+const GB_BY(*const GameBoyScreen)[SCREEN_MAX_Y] = GBCore::gpu._Screen;
 
 int GameBoyInit();
 void RunANewFrame();
@@ -34,18 +36,20 @@ int KeyEvent(KEYNAME keyname,KEYMOVE keymove);
 int LoadRom(std::string &dir);
 
 int GameBoyInit() {
-	memory.Init();
-	cpu.Init();
+	GBCore::memory.Init();
+	GBCore::cpu.Init();
+	return 1;
 }
 
 void RunANewFrame() {
-	while (!gpu.GetNewFrameFlag()) {
-		cpu.Step();
+	while (!GBCore::gpu.GetNewFrameFlag()) {
+		GBCore::cpu.Step();
 	}
-	gpu.SetNewFrameFlag(0);
+	GBCore::gpu.SetNewFrameFlag(0);
 }
 //return 0 if failed.
 inline int KeyEvent(KEYNAME keyname, KEYMOVE keymove) {
+	using namespace GBCore;
 	if (keymove == KY_PRESS) {
 		switch (keyname) {
 		case KY_A:
@@ -111,10 +115,10 @@ inline int KeyEvent(KEYNAME keyname, KEYMOVE keymove) {
 //return 0 if failed.
 int LoadRom(std::string &dir) {
 	const char *tmp = dir.c_str();
-	memory.LoadRom(tmp);
+	GBCore::memory.LoadRom(tmp);
 	return 1;
 }
 int LoadRom(char* dir) {
-	memory.LoadRom(dir);
+	GBCore::memory.LoadRom(dir);
 	return 1;
 }
