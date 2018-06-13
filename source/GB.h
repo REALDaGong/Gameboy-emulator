@@ -81,3 +81,11 @@ typedef uint8_t GB_BY;
 #define SCREEN_MAX_X 160
 #define SCREEN_MAX_Y 144
 
+#define MBC1 1
+#define MBC2 2
+#define MBC3 3
+#define MMM01 9
+#define MBC4 4
+#define MBC5 5
+#define MBC6 6
+#define MBC7 7
