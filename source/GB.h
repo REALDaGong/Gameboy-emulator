@@ -5,6 +5,7 @@
 #include<functional>
 #include<string>
 #include<fstream>
+#include<memory.h>
 using namespace std;
 typedef uint32_t CLOCK_Val;
 typedef uint16_t GB_DB;
