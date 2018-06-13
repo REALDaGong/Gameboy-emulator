@@ -6,71 +6,47 @@ void GPU::GPUStep() {
 #define Vb 1
 #define OAM 2
 #define VRAM 3
-	
-	switch ((*mode)&0x3) {
-	case(Hb):
-		CheckModeInter(Hb);
-		if (_GPU_CLOCK >= 204) {
-			_GPU_CLOCK = 0;
-			(*line)++;
-			CheckLCDCCoincidenceInter();
-			
-			if (*line == 144)//?143 or 144?
-			{
-				
-				_Memory.MemoryWrite(IF, _Memory.MemoryRead(IF) | 0x1);
-				_Memory._memory_mapio[STAT - 0xFF00] &= 0xFC;
-				_Memory._memory_mapio[STAT - 0xFF00] += Vb;
-				NewFrame();
-				
-				//new frame
-			}
-			else {
-				
-				_Memory._memory_mapio[STAT - 0xFF00] &= 0xFC;
-				_Memory._memory_mapio[STAT - 0xFF00] += OAM;
-			}
+	if (*line > 143) {
+		*stat = (*stat) & 0xFC | Vb;
+	}
+	else {
+		if (_GPU_CLOCK >= 376) {
+			*stat = (*stat) & 0xFC | OAM;
+			lcdc_happend = 0;
+			CheckModeInter(OAM);
 		}
-		break;
-	case(Vb):
-		CheckModeInter(Vb);
-		if (_GPU_CLOCK >= 456) {
-			_GPU_CLOCK = 0;
-			(*line)++;
-			CheckLCDCCoincidenceInter();
+		else if (_GPU_CLOCK >= 204) {
+			*stat = (*stat) & 0xFC | VRAM;
+			lcdc_happend = 0;
 			
-			
-			
-			if (*line > 153) {
-				
-				_Memory._memory_mapio[STAT - 0xFF00] &= 0xFC;
-				_Memory._memory_mapio[STAT - 0xFF00] += OAM;
-				*line = 0;
-				CheckLCDCCoincidenceInter();
-				
-			}
 		}
-		break;
-	case(OAM):
-		CheckModeInter(OAM);
-		if (_GPU_CLOCK >= 80) {
-			_GPU_CLOCK = 0;
-			
-			_Memory._memory_mapio[STAT - 0xFF00] &= 0xFC;
-			_Memory._memory_mapio[STAT - 0xFF00] += VRAM;
-		}
-		break;
-	case(VRAM):
-		if (_GPU_CLOCK >= 172) {
-			_GPU_CLOCK = 0;
-			
-			_Memory._memory_mapio[STAT - 0xFF00] &= 0xFC;
-			_Memory._memory_mapio[STAT - 0xFF00] += Hb;
-			
-			Newline();
-			//new scanline
+		else {
+			*stat = (*stat) & 0xFC;
+			CheckModeInter(Vb);
 		}
 	}
+
+	if (_GPU_CLOCK <= 0) {
+		_GPU_CLOCK = 456;
+		(*line)++;
+		if (*line == 145) {
+			_Memory.MemoryWrite(IF, _Memory.MemoryRead(IF) | 0x1);
+			*stat = (*stat) & 0xFC | Vb;
+			return;
+		}
+		if (*line < 145) {
+			(*line)--;
+			Newline();
+			(*line)++;
+		}
+		if (*line == 154) {
+			NewFrame();
+			(*line) = 0;
+		}
+		
+	}
+	CheckLCDCCoincidenceInter();
+	
 }
 void GPU::Newline() {
 #define WINDOW 1
@@ -99,6 +75,7 @@ void GPU::TransferScreen(GB_DB MapNoSt,GB_DB TileSt,GB_BY Mask) {
 	Yoffset = _Memory.MemoryRead(SCY);
 
 	
+
 	GB_BY TileX= Xoffset / 8;
 	GB_BY TileY = ((((*line) + Yoffset) & 255) / 8);
 	GB_DB FirstTileNo = ((((*line)+Yoffset)&255)/8)*32+Xoffset/8;//get the first(left up corner tile)'s No.
@@ -114,7 +91,7 @@ void GPU::TransferScreen(GB_DB MapNoSt,GB_DB TileSt,GB_BY Mask) {
 		}
 	}
 	for (int i = 0; i < MinorXoffset; i++) {
-		_Screen[X++][*line] = _Memory.TileSet[((_Memory.MemoryRead(((TileX + 20) & 31) + (GB_DB)TileY * 32 + MapNoSt) + Mask) & 0xff) + TileSt][i][MinorYoffset];
+		_Screen[X++][*line] =_Memory.TileSet[((_Memory.MemoryRead(((TileX + 20) & 31) + (GB_DB)TileY * 32 + MapNoSt) + Mask) & 0xff) + TileSt][i][MinorYoffset];
 	}
 	
 }
@@ -125,18 +102,18 @@ void GPU::TransferWindow(GB_DB MapNoSt, GB_DB TileSt, GB_BY Mask) {
 	Xoffset = _Memory.MemoryRead(WX)-7;
 	Yoffset = _Memory.MemoryRead(WY);
 
-
-	GB_BY TileX = Xoffset / 8;
+	
+	
 	GB_BY TileY = (((*line)-Yoffset) / 8);
 	GB_DB FirstTileNo = TileY*32;
-	GB_BY MinorXoffset = Xoffset - TileX * 8;
+	
 	GB_BY MinorYoffset = ((*line) - Yoffset) - TileY * 8;
 	GB_BY X = 0;
 	
 	for (int k = 0; k < 20; k++) {
 		for (int i = 0; i < 8; i++) {
-			_Window[Xoffset + X++][*line] = _Memory.TileSet[((_Memory.MemoryRead(((TileX + k) & 31) + (GB_DB)TileY * 32 + MapNoSt) + Mask) & 0xff) + TileSt][i][MinorYoffset];
-			if (Xoffset != 0 && X + Xoffset == 0) {
+			_Window[Xoffset + X++][*line] =_Memory.TileSet[((_Memory.MemoryRead((k & 31) + (GB_DB)TileY * 32 + MapNoSt) + Mask) & 0xff) + TileSt][i][MinorYoffset];
+			if (X + Xoffset >= 160) {
 				return;
 			}
 		}
@@ -147,6 +124,7 @@ void GPU::TransferWindow(GB_DB MapNoSt, GB_DB TileSt, GB_BY Mask) {
 //initial a frame without taking X and Y offset into consideration.
 //havn't merge bg,wn and sp together.
 void GPU::UpgradeSprite() {
+	
 	memset(_Sprite, -1, sizeof(_Sprite));//-1 means sprite layer is empty.
 	GB_BY mode8x16 = (_Memory.MemoryRead(LCDC) >> 2) & 1;
 	
@@ -185,22 +163,32 @@ void GPU::UpgradeSprite() {
 					ptrSprite[i] = tmp;
 				}
 				else {
+					
 					if (ptrSprite[i]->No < ptrSprite[i + 1]->No) {
+						tmp = ptrSprite[i];
+						ptrSprite[i] = ptrSprite[i + 1];
+						ptrSprite[i] = tmp;
+					}
+					if (ptrSprite[i]->Y > ptrSprite[i + 1]->Y) {
 						tmp = ptrSprite[i];
 						ptrSprite[i] = ptrSprite[i + 1];
 						ptrSprite[i] = tmp;
 					}
 				}
 			}
+
 		}
 	}
-	//i can use less<> if i want.but i dont.
-	//transfer data to pics
-	//miss the proper process on prority.
+	
 	GB_BY PicSize = mode8x16 ? 16 : 8;
-	for (int i = 0; i < 40;i++) {
+	GB_BY OBP[2];
+	
+	OBP[0] = _Memory.MemoryRead(OBP0);
+	OBP[1] = _Memory.MemoryRead(OBP1);
+	
+	for (int i = 0; i < 40; i++) {
 		if (ptrSprite[i]) {
-			GB_DB Place = 0x8000+ptrSprite[i]->No*PicSize*2;
+			GB_DB Place = 0x8000 + ptrSprite[i]->No*PicSize * 2;
 			if (ptrSprite[i]->Xfilp || ptrSprite[i]->Yfilp) {
 				if (ptrSprite[i]->Xfilp && ptrSprite[i]->Yfilp) {
 					for (int k = 0; k < PicSize; k++) {
@@ -209,62 +197,74 @@ void GPU::UpgradeSprite() {
 						for (int j = 0; j < 8; j++) {
 							GB_BY X = (j + ptrSprite[i]->X) % 256;
 							GB_BY Y = (k + ptrSprite[i]->Y) % 256;
-							_Sprite[X][Y] = (_Memory.MemoryRead((ptrSprite[i]->PlaNo) + 0xFF48)
-								>> (2 * (((byte1 >> j) & 1) + ((byte2 >> j) & 1) * 2))) & 3;
+							if (X >= SCREEN_MAX_X)continue;
+							if (Y >= SCREEN_MAX_Y)break;
+							_Sprite[X][Y] = ((byte1 >> j) & 1) + ((byte2 >> j) & 1) * 2;
+							//(_Memory.MemoryRead((ptrSprite[i]->PlaNo) + 0xFF48)
+
 							if (ptrSprite[i]->pirority) {
 								if (_Screen[X][Y] == 0 && _Sprite[X][Y] != 0)
-									_Screen[X][Y] = _Sprite[X][Y];
-							}
-							else {
-								if (_Sprite[X][Y] != 0)
-									_Screen[X][Y] = _Sprite[X][Y];
-							}
-						}
+									_Screen[X][Y] = (1 + (((OBP[ptrSprite[i]->PlaNo] >> (2 * _Sprite[X][Y]))) & 3)) << 2;
 
-					}
-				}else
-				if (ptrSprite[i]->Xfilp) {
-					for (int k = 0; k < PicSize; k++) {
-						GB_BY byte1 = _Memory.MemoryRead(Place + 2 * k);
-						GB_BY byte2 = _Memory.MemoryRead(Place + 2 * k + 1);
-						for (int j = 0; j < 8; j++) {
-							GB_BY X = (j + ptrSprite[i]->X) % 256;
-							GB_BY Y = (k + ptrSprite[i]->Y) % 256;
-							_Sprite[X][Y] = (_Memory.MemoryRead((ptrSprite[i]->PlaNo) + 0xFF48)
-								>> (2 * (((byte1 >> j) & 1) + ((byte2 >> j) & 1) * 2))) & 3;
-							if (ptrSprite[i]->pirority) {
-								if(_Screen[X][Y]==0 && _Sprite[X][Y] != 0)
-								_Screen[X][Y] = _Sprite[X][Y];
 							}
 							else {
 								if (_Sprite[X][Y] != 0)
-								_Screen[X][Y] = _Sprite[X][Y];
+									_Screen[X][Y] = (1 + (((OBP[ptrSprite[i]->PlaNo] >> (2 * _Sprite[X][Y]))) & 3)) << 2;
+
 							}
 						}
 
 					}
 				}
-				else {
-					for (int k = 0; k < PicSize; k++) {
-						GB_BY byte1 = _Memory.MemoryRead(Place + 2 * (PicSize-1-k));
-						GB_BY byte2 = _Memory.MemoryRead(Place + 2 * (PicSize-1-k)+1);
-						for (int j = 0; j < 8; j++) {
-							GB_BY X = (j + ptrSprite[i]->X) % 256;
-							GB_BY Y = (k + ptrSprite[i]->Y) % 256;
-							_Sprite[X][Y] = (_Memory.MemoryRead((ptrSprite[i]->PlaNo) + 0xFF48)
-								>> (2 * (((byte1 >> (7-j)) & 1) + ((byte2 >>(7 - j)) & 1) * 2))) & 3;
-							if (ptrSprite[i]->pirority) {
-								if (_Screen[X][Y] == 0&& _Sprite[X][Y]!=0)
-									_Screen[X][Y] = _Sprite[X][Y];
-							}
-							else {
-								if(_Sprite[X][Y] != 0)
-								_Screen[X][Y] = _Sprite[X][Y];
-							}
-						}
+				else
+					if (ptrSprite[i]->Xfilp) {
+						for (int k = 0; k < PicSize; k++) {
+							GB_BY byte1 = _Memory.MemoryRead(Place + 2 * k);
+							GB_BY byte2 = _Memory.MemoryRead(Place + 2 * k + 1);
+							for (int j = 0; j < 8; j++) {
+								GB_BY X = (j + ptrSprite[i]->X) % 256;
+								GB_BY Y = (k + ptrSprite[i]->Y) % 256;
+								if (X >= SCREEN_MAX_X)continue;
+								if (Y >= SCREEN_MAX_Y)break;
+								_Sprite[X][Y] = ((byte1 >> j) & 1) + ((byte2 >> j) & 1) * 2;
+								if (ptrSprite[i]->pirority) {
+									if (_Screen[X][Y] == 0 && _Sprite[X][Y] != 0)
+										_Screen[X][Y] = (1 + (((OBP[ptrSprite[i]->PlaNo] >> (2 * _Sprite[X][Y]))) & 3)) << 2;
 
+								}
+								else {
+									if (_Sprite[X][Y] != 0)
+										_Screen[X][Y] = (1 + (((OBP[ptrSprite[i]->PlaNo] >> (2 * _Sprite[X][Y]))) & 3)) << 2;
+
+								}
+							}
+
+						}
 					}
-				}
+					else {
+						for (int k = 0; k < PicSize; k++) {
+							GB_BY byte1 = _Memory.MemoryRead(Place + 2 * (PicSize - 1 - k));
+							GB_BY byte2 = _Memory.MemoryRead(Place + 2 * (PicSize - 1 - k) + 1);
+							for (int j = 0; j < 8; j++) {
+								GB_BY X = (j + ptrSprite[i]->X) % 256;
+								GB_BY Y = (k + ptrSprite[i]->Y) % 256;
+								if (X >= SCREEN_MAX_X)continue;
+								if (Y >= SCREEN_MAX_Y)break;
+								_Sprite[X][Y] = ((byte1 >> (7 - j)) & 1) + ((byte2 >> (7 - j)) & 1) * 2;
+								if (ptrSprite[i]->pirority) {
+									if (_Screen[X][Y] == 0 && _Sprite[X][Y] != 0)
+										_Screen[X][Y] = (1 + (((OBP[ptrSprite[i]->PlaNo] >> (2 * _Sprite[X][Y]))) & 3)) << 2;
+
+								}
+								else {
+									if (_Sprite[X][Y] != 0)
+										_Screen[X][Y] = (1 + (((OBP[ptrSprite[i]->PlaNo] >> (2 * _Sprite[X][Y]))) & 3)) << 2;
+
+								}
+							}
+
+						}
+					}
 			}
 			else {
 				for (int k = 0; k < PicSize; k++) {
@@ -273,15 +273,18 @@ void GPU::UpgradeSprite() {
 					for (int j = 0; j < 8; j++) {
 						GB_BY X = (j + ptrSprite[i]->X) % 256;
 						GB_BY Y = (k + ptrSprite[i]->Y) % 256;
-						_Sprite[X][Y] = (_Memory.MemoryRead((ptrSprite[i]->PlaNo) + 0xFF48)
-							>> (2 * (((byte1 >> (7-j)) & 1) + ((byte2 >>(7- j)) & 1) * 2))) & 3;
+						if (X >= SCREEN_MAX_X)continue;
+						if (Y >= SCREEN_MAX_Y)break;
+						_Sprite[X][Y] = ((byte1 >> (7 - j)) & 1) + ((byte2 >> (7 - j)) & 1) * 2;
 						if (ptrSprite[i]->pirority) {
 							if (_Screen[X][Y] == 0 && _Sprite[X][Y] != 0)
-								_Screen[X][Y] = _Sprite[X][Y];
+								_Screen[X][Y] = (1 + (((OBP[ptrSprite[i]->PlaNo] >> (2 * _Sprite[X][Y]))) & 3)) << 2;
+
 						}
 						else {
 							if (_Sprite[X][Y] != 0)
-							_Screen[X][Y] = _Sprite[X][Y];
+								_Screen[X][Y] = (1 + (((OBP[ptrSprite[i]->PlaNo] >> (2 * _Sprite[X][Y]))) & 3)) << 2;
+
 						}
 					}
 
@@ -291,28 +294,42 @@ void GPU::UpgradeSprite() {
 		}
 		break;
 	}
+
 }
 //didnt limit the sprites number per line.
 void GPU::NewFrame() {
-	UpgradeSprite();
+	
 	//[X][Y]
+	GB_BY _BGP = _Memory.MemoryRead(BGP);
+
+	
+	UpgradeSprite();
+	
+
+	for (int i = 0; i < SCREEN_MAX_X; i++) {
+		for (int j = 0; j < SCREEN_MAX_Y; j++) {
+			if (_Screen[i][j] < 4)
+				_Screen[i][j] = (_BGP >> (2 * _Screen[i][j])) & 3;
+			else
+				_Screen[i][j] = (_Screen[i][j]>>2)-1;
+		}
+	}
+
 	if ((_Memory.MemoryRead(LCDC) >> 5) & 1) {
 		GB_BY X = _Memory.MemoryRead(WX) - 7;
 		GB_BY Y = _Memory.MemoryRead(WY);
-		for (int i = X; i < 160; i++) {
-			for (int j = Y; j < 144; j++) {
-				_Screen[i][j] = _Window[i][j];
+		for (int i = X; i < SCREEN_MAX_X; i++) {
+			for (int j = Y; j < SCREEN_MAX_Y; j++) {
+				_Screen[i][j] = (_BGP >> (2 * _Window[i][j])) & 3;
+
 			}
 		}
 	}
 	SetNewFrameFlag(1);
-	//do it!
-	//dont let your dream be dream!
-	//yesterday you say tomorrow.
-	//
-	//merge them!!!!;
+	
 }
 inline void GPU::CheckLCDCCoincidenceInter() {
+	
 	if (_Memory._memory_mapio[LYC-0xFF00] == _Memory._memory_mapio[LY - 0xFF00]) {
 		_Memory._memory_mapio[STAT - 0xFF00] |= 0x4;
 	}
@@ -322,7 +339,10 @@ inline void GPU::CheckLCDCCoincidenceInter() {
 	if ((_Memory._memory_mapio[STAT - 0xFF00] & 0x4) && (_Memory._memory_mapio[STAT - 0xFF00] & 64)) {
 		_Memory.MemoryWrite(IF, _Memory.MemoryRead(0xFFFF) | 0x2);
 	}
+	
 }
 inline void GPU::CheckModeInter(GB_BY Mode) {
+	if (lcdc_happend) return;
 	if(_Memory._memory_mapio[STAT - 0xFF00]>>(Mode+3)&1)_Memory.MemoryWrite(IF,_Memory.MemoryRead(0xFFFF)|0x2);
+	lcdc_happend = 1;
 }

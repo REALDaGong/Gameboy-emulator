@@ -7,7 +7,7 @@
 #define FLAG_NEGA 6//sub
 #define FLAG_HACA 5
 #define FLAG_CARY 4
-#define DEBUGGER
+//#define DEBUGGER
 
 class Z80 {
 private:
@@ -27,15 +27,15 @@ private:
 	REG _REG;
 	inline void SetFlag(int cname, GB_BY val) {
 		if (val == 0) {
-			_REG.F &= ((GB_BY)1<<cname)^0xFF;
+			_REG.F &= (static_cast<GB_BY>(1)<<cname)^0xFF;
 		}
 		else {
-			_REG.F |= ((GB_BY)1<<cname);
+			_REG.F |= (static_cast<GB_BY>(1)<<cname);
 		}
 	}
 	
 	inline GB_BY GetFlag(int cname) {
-		if (_REG.F&(GB_BY)1 << cname)return (GB_BY)1; return (GB_BY)0;
+		if (_REG.F&static_cast<GB_BY>(1) << cname)return (GB_BY)1; return (GB_BY)0;
 	}
 	bool isPause;
 	void Pause() {
@@ -83,7 +83,21 @@ private:
 	GPU& _GPU;
 	Timer& _Timer;
 public:
-	explicit Z80(Memory& memory, GPU& GPU, Timer& Timer) :_Memory(memory), _GPU(GPU), _Timer(Timer){ Init(); };
+	explicit Z80(Memory& memory, GPU& GPU, Timer& Timer) :_Memory(memory), _GPU(GPU), _Timer(Timer){ 
+		isPause = 0;
+		isStop = 0;
+		_REG.A =
+		_REG.F =
+		_REG.B =
+		_REG.C =
+		_REG.D =
+		_REG.E =
+		_REG.H =
+		_REG.L = 0;
+		_REG.PC = _REG.SP = 0;
+		_REG.IME = 0;
+		Init();
+	};
 	~Z80() {};
 
 	void Step();	
