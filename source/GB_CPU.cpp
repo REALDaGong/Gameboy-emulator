@@ -9,7 +9,7 @@
 #define _EARLY_DEBUG
 #ifdef _EARLY_DEBUG
 extern int PAUSE;
-#include<conio.h>
+
 #include<iomanip>
 #endif // _EARLY_TEST
 
