@@ -84,8 +84,8 @@ private:
 		GB_BY PlaNo;
 		GB_BY isRender;
 		GB_BY No;
-	}sprite[10];
-	Sprite *ptrSprite[10];
+	}sprite[41];
+	Sprite *ptrSprite[41];
 
 
 };
