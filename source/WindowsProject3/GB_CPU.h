@@ -7,13 +7,44 @@
 #define FLAG_NEGA 6//sub
 #define FLAG_HACA 5
 #define FLAG_CARY 4
-//#define DEBUGGER
+/*
+cpu.
+do cpu things.
+details in function Step.
+*/
 
 class Z80 {
+public:
+	explicit Z80(Memory& memory, GPU& GPU, Timer& Timer) :_Memory(memory), _GPU(GPU), _Timer(Timer) {
+		Init();
+	};
+	~Z80() {};
+
+	void Step();
+	void Init() {
+		InitOpCodeList();
+		isPause = 0;
+		isStop = 0;
+		Op = 0;
+		delta = 0;
+		_REG.A =
+			_REG.F =
+			_REG.B =
+			_REG.C =
+			_REG.D =
+			_REG.E =
+			_REG.H =
+			_REG.L = 0;
+		_REG.PC = _REG.SP = 0;
+		_REG.IME = 0;
+	}
+
+	void InitOpCodeList();
+
 private:
 
 	struct REG {
-			GB_BY A, F;			//15...8 7...0
+			GB_BY A, F;			//15...8 7...0 F's low 4 bit must always be 0
 			GB_BY B, C;			//
 			GB_BY D, E;			//
 			GB_BY H, L;			//
@@ -25,6 +56,8 @@ private:
 
 	};
 	REG _REG;
+	GB_BY Op;					//actually is IR
+	GB_BY delta;					//how many clks last Op consumed 
 	inline void SetFlag(int cname, GB_BY val) {
 		if (val == 0) {
 			_REG.F &= (static_cast<GB_BY>(1)<<cname)^0xFF;
@@ -37,14 +70,8 @@ private:
 	inline GB_BY GetFlag(int cname) {
 		if (_REG.F&static_cast<GB_BY>(1) << cname)return (GB_BY)1; return (GB_BY)0;
 	}
-	bool isPause;
-	void Pause() {
-		if (!isPause)return;
-	}
-	bool isStop;
-	void Stop() {
-		if (!isStop)return;
-	}
+	bool isPause,isStop;     //for HALT,STOP Ops
+
 	void LDHL();
 	
 	void ADD(GB_BY REG);
@@ -67,7 +94,7 @@ private:
 	void RRC(GB_BY &REG);
 	void RR(GB_BY &REG);
 	
-	void SLA(GB_BY &REG);//MSB
+	void SLA(GB_BY &REG);
 	void SRA(GB_BY &REG);
 	void SRL(GB_BY &REG);
 
@@ -82,54 +109,5 @@ private:
 	Memory& _Memory;
 	GPU& _GPU;
 	Timer& _Timer;
-public:
-	explicit Z80(Memory& memory, GPU& GPU, Timer& Timer) :_Memory(memory), _GPU(GPU), _Timer(Timer){ 
-		isPause = 0;
-		isStop = 0;
-		_REG.A =
-		_REG.F =
-		_REG.B =
-		_REG.C =
-		_REG.D =
-		_REG.E =
-		_REG.H =
-		_REG.L = 0;
-		_REG.PC = _REG.SP = 0;
-		_REG.IME = 0;
-		Init();
-	};
-	~Z80() {};
 
-	void Step();	
-	void Init() {
-		InitOpCodeList();
-		_REG.PC = 0x100;
-#ifdef DEBUGGER
-		_REG.A = 0x11;
-		_REG.F = 0x80;
-		_REG.D = 0xFF;
-		_REG.E = 0x56;
-		_REG.H = 0x00;
-		_REG.L = 0xD;
-		_REG.SP = 0xFFFE;
-		_REG.IME = 0;
-#endif // DEBUGGER
-#ifndef DEBUGGER
-		
-		_REG.A = 0x01;
-		_REG.F = 0xB0;
-		_REG.B = 0x0;
-		_REG.C = 0x13;
-		_REG.D = 0;
-		_REG.E = 0xD8;
-		_REG.H = 0x01;
-		_REG.L = 0x4D;
-		_REG.SP = 0xFFFE;
-		_REG.IME = 1;
-		
-#endif 
-	}
-	
-	void InitOpCodeList();
-
-	};
+};

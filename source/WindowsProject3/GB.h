@@ -1,11 +1,14 @@
 #pragma once
-#include<iostream>
+
 #include<cctype>
 #include<array>
 #include<functional>
 #include<string>
 #include<fstream>
 #include<memory.h>
+/*
+Provide some const values.
+*/
 using namespace std;
 typedef uint32_t CLOCK_Val;
 typedef uint16_t GB_DB;
@@ -90,3 +93,7 @@ typedef uint8_t GB_BY;
 #define MBC5 5
 #define MBC6 6
 #define MBC7 7
+
+#define SERIAL_EXTERN_CLOCK 2
+#define SERIAL_INTER_CLOCK 1
+#define SERIAL_CLOSED 0

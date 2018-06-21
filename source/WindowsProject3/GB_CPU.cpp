@@ -1,103 +1,79 @@
-﻿//4.27 01:38 
-//throat pain.
-//SEARCH:
-//flagf: all ops with CPUflag operation
-//unfinished: as what i say.
-//?:i dont understand
+
+/*
+contains:
+all opcodes
+cpu main loop
+interrupt handler
+*/
 
 #include"GB_CPU.h"
-#define _EARLY_DEBUG
-#ifdef _EARLY_DEBUG
-extern int PAUSE;
 
-#include<iomanip>
-#endif // _EARLY_TEST
-
-
-using namespace std;
-array<function<int()>, 0x100 * sizeof(int)> OpCode;
-array<function<int()>, 0x100 * sizeof(int)> CBOpCode;
+static array<function<int()>, 0x100 * sizeof(int)> OpCode;
+static array<function<int()>, 0x100 * sizeof(int)> CBOpCode;
 
 
 void Z80::Step() {
-	static uint64_t time = 0;
-	time++;
-	if (_REG.PC==0x162) {
-		int a;
-		a = 2;
-	}
-	if (1) {
-		
-		/*if (time != 0&&time<1000) {
-			time++;
-			cout.fill('0');
-			cout.width(2);
-			cout << hex;
-			cout << "AF:" << setw(2) << (unsigned short)_REG.A << setw(2) << (unsigned short)_REG.F << endl;
-			cout << "BC:" << setw(2) << (unsigned short)_REG.B << setw(2) << (unsigned short)_REG.C << endl;
-			cout << "DE:" << setw(2) << (unsigned short)_REG.D << setw(2) << (unsigned short)_REG.E << endl;
-			cout << "HL:" << setw(2) << (unsigned short)_REG.H << setw(2) << (unsigned short)_REG.L << endl;
-			cout << "SP:" << _REG.SP << endl;
-			cout << "PC:" << _REG.PC << endl;
-			cout << "LY:" << setw(2) << (unsigned short)_Memory.MemoryRead(LY) << endl;
-			cout << "STAT:" << setw(4) << (unsigned short)_Memory.MemoryRead(STAT) << endl;
-			cout << "IME:" << (unsigned short)_REG.IME << endl;
-			cout << "FF89:" << setw(2) << (unsigned short)_Memory.MemoryRead(0xFF89) << endl;
-			cout << "------------------------" << time << endl;
-		}*/
-		GB_BY Op = _Memory.MemoryRead(_REG.PC++);
-		GB_BY delta = (GB_BY)OpCode[Op]();
+	
+	if (!isPause) {
+		Op = _Memory.MemoryRead(_REG.PC++);
+		delta = (GB_BY)OpCode[Op]();
 		_Timer.TimerInc(delta);
 		_GPU.AddClock(delta);
-		
-#ifdef _EARLY_DEBUG
-		
-		
-#endif 
+		_Memory.SendClock(delta);
 	}
 	else {
 		_Timer.TimerInc(4);
-		//_GPU.AddClock(4);
+		_GPU.AddClock(4);
+		_Memory.SendClock(4);
 	}
-	if ((_Memory.MemoryRead(IE)&_Memory.MemoryRead(IF)) && _REG.IME) {
+
+	if (_Memory.MemoryRead(IE)&_Memory.MemoryRead(IF)) {
 		isPause = 0;
-		GB_BY IMEType = _Memory.MemoryRead(IE)&_Memory.MemoryRead(IF);
-		Interrupt(IMEType);
-		_Timer.TimerInc(16);
+		if (_REG.IME) {
+			GB_BY _IE = _Memory.MemoryRead(IE);
+			GB_BY _IF = _Memory.MemoryRead(IF);
+			GB_BY IMEType = _IE & _IF;
+			Interrupt(IMEType);
+			_GPU.AddClock(20);
+			_Memory.SendClock(20);
+			//it seems that a INTR transfer procedure will spend 20clks
+			//and it will stop the timer for a while
+			//i dont quite understand.
+		}
 	}
 		
 	
 
 }
 void Z80::Interrupt(GB_BY IMEtype) {
-	_Memory.MemoryWrite(IF, _Memory.MemoryRead(IF)&(255 - IMEtype));
+	
 	_REG.IME = 0;
 	if (IMEtype & 0x01) {
-
+		_Memory.MemoryWrite(IF, _Memory.MemoryRead(IF)&(~0x1));
 		RST();
 		_REG.PC = 0x40;
 	}//V-BLANK
 	else
 		if (IMEtype & 0x02) {
-
+			_Memory.MemoryWrite(IF, _Memory.MemoryRead(IF)&(~0x2));
 			RST();
 			_REG.PC = 0x48;
 		}//LCDC (see STAT)
 		else
 			if (IMEtype & 0x04) {
-
+				_Memory.MemoryWrite(IF, _Memory.MemoryRead(IF)&(~0x4));
 				RST();
 				_REG.PC = 0x50;
 			}//timer overflow
 			else
 				if (IMEtype & 0x08) {
-
+					_Memory.MemoryWrite(IF, _Memory.MemoryRead(IF)&(~0x8));
 					RST();
 					_REG.PC = 0x58;
 				}//serial io transfer complete
 				else
 					if (IMEtype & 0x10) {
-
+						_Memory.MemoryWrite(IF, _Memory.MemoryRead(IF)&(~0x10));
 						RST();
 						_REG.PC = 0x60;
 					}//transition from high to low of pin number p10-p13
@@ -105,8 +81,8 @@ void Z80::Interrupt(GB_BY IMEtype) {
 }
 void Z80::InitOpCodeList() {
 	for (int i = 0; i < 0x100; i++) {
-		OpCode[i] = [&]()->int {return 4; };
-		CBOpCode[i] = [&]()->int {return 4; };
+		OpCode[i] = [&]()->int {return 0; };
+		CBOpCode[i] = [&]()->int {return 0; };
 	}
 	//LD nn,n put n into reg nn
 
@@ -479,22 +455,22 @@ void Z80::InitOpCodeList() {
 	OpCode[0x00] = [&]()->int {return 4; };
 
 	//HALT
-	//unfinished
+	
 	OpCode[0x76] = [&]()->int {isPause = 1; return 4; };//for further ?
 
 	//STOP
-	//unfinished
+	
 	OpCode[0x10] = [&]()->int {isStop = 1; _REG.PC++; if ((_Memory.MemoryRead(0xFF4D) & 1))_Memory.MemoryWrite(0xFF4D, 0xFE); return 4; };//set cpu and lcd pause
 
 	 //DI,EI
 	 //p98
-	//unfinished
+	
 	OpCode[0xF3] = [&]()->int {_REG.IME = 0; return 4; };
 
 	OpCode[0xFB] = [&]()->int {_REG.IME = 1; return 4; };
 	//RLCA
 	//flagf
-	//????????????????well?what does 'C' mean?
+	
 	OpCode[0x07] = [&]()->int {
 		GB_BY by = 0x80 & _REG.A;
 		_REG.A <<= 1;
@@ -910,11 +886,10 @@ void Z80::InitOpCodeList() {
 	
 	OpCode[0xD3] = [&]()->int {SetFlag(FLAG_ZERO, 1); return 0; };
 	OpCode[0xED] = [&]()->int {_Memory._inbios = 0; _REG.PC--; return 0; };
-	//false Opcode,but make my work easily.
+	//no such Opcode,but make my work easy,yay.
 }
 
-
-inline void Z80::LDHL() {
+void Z80::LDHL() {
 	SetFlag(FLAG_ZERO, 0);
 	SetFlag(FLAG_NEGA, 0);
 	
@@ -927,7 +902,7 @@ inline void Z80::LDHL() {
 	_REG.H = (re >> 8) & 0xFF;
 }
 
-inline void Z80::ADD(GB_BY REG) {
+void Z80::ADD(GB_BY REG) {
 	SetFlag(FLAG_NEGA, 0);
 	GB_DB re = _REG.A + REG;
 	SetFlag(FLAG_ZERO, (re & 0xff) == 0);
@@ -936,7 +911,7 @@ inline void Z80::ADD(GB_BY REG) {
 	_REG.A = re & 0xFF;
 
 }
-inline void Z80::ADDHL(GB_BY REGH,GB_BY REGL) {
+void Z80::ADDHL(GB_BY REGH,GB_BY REGL) {
 	GB_DB hl = (_REG.H << 8) + _REG.L;
 	GB_DB db = (REGH << 8) + REGL;
 	uint32_t re = hl + db;
@@ -946,7 +921,7 @@ inline void Z80::ADDHL(GB_BY REGH,GB_BY REGL) {
 	_REG.H = (re & 0xFF00)>>8;
 	_REG.L = re & 0xFF;
 }
-inline void Z80::ADC(GB_BY REG) {
+void Z80::ADC(GB_BY REG) {
 	SetFlag(FLAG_NEGA, 0);
 	GB_DB re = _REG.A + REG + GetFlag(FLAG_CARY);
 	SetFlag(FLAG_ZERO, (re & 0xff) == 0);
@@ -954,7 +929,7 @@ inline void Z80::ADC(GB_BY REG) {
 	SetFlag(FLAG_CARY, re>0xff);
 	_REG.A = re & 0xFF;
 }
-inline void Z80::SUB(GB_BY REG) {
+void Z80::SUB(GB_BY REG) {
 	SetFlag(FLAG_NEGA, 1);
 	GB_DB re = _REG.A - REG;
 	SetFlag(FLAG_ZERO, (re & 0xff) == 0);
@@ -962,7 +937,7 @@ inline void Z80::SUB(GB_BY REG) {
 	SetFlag(FLAG_CARY, _REG.A<REG);
 	_REG.A = re & 0xFF;
 }
-inline void Z80::SBC(GB_BY REG) {
+void Z80::SBC(GB_BY REG) {
 	SetFlag(FLAG_NEGA, 1);
 	GB_DB re = _REG.A - REG - GetFlag(FLAG_CARY);
 	SetFlag(FLAG_ZERO, (re&0xff) == 0);
@@ -970,7 +945,7 @@ inline void Z80::SBC(GB_BY REG) {
 	SetFlag(FLAG_CARY, (re & 0x100)>>8);
 	_REG.A = re & 0xFF;
 }
-inline void Z80::AND(GB_BY REG) {
+void Z80::AND(GB_BY REG) {
 	_REG.A &= REG;
 	SetFlag(FLAG_ZERO, _REG.A == 0);
 	SetFlag(FLAG_NEGA, 0);
@@ -978,7 +953,7 @@ inline void Z80::AND(GB_BY REG) {
 	SetFlag(FLAG_CARY, 0);
 
 }
-inline void Z80::OR(GB_BY REG) {
+void Z80::OR(GB_BY REG) {
 	_REG.A |= REG;
 	SetFlag(FLAG_ZERO, _REG.A == 0);
 	SetFlag(FLAG_NEGA, 0);
@@ -986,7 +961,7 @@ inline void Z80::OR(GB_BY REG) {
 	SetFlag(FLAG_CARY, 0);
 
 }
-inline void Z80::XOR(GB_BY REG) {
+void Z80::XOR(GB_BY REG) {
 	_REG.A ^= REG;
 	SetFlag(FLAG_ZERO, _REG.A == 0);
 	SetFlag(FLAG_NEGA, 0);
@@ -994,7 +969,7 @@ inline void Z80::XOR(GB_BY REG) {
 	SetFlag(FLAG_CARY, 0);
 
 }
-inline void Z80::CP(GB_BY REG) {
+void Z80::CP(GB_BY REG) {
 	SetFlag(FLAG_NEGA, 1);
 	GB_DB re = _REG.A - REG;
 	SetFlag(FLAG_ZERO, (re & 0xff) == 0);
@@ -1002,19 +977,19 @@ inline void Z80::CP(GB_BY REG) {
 	SetFlag(FLAG_CARY, REG>_REG.A);
 
 }
-inline void Z80::INC(GB_BY &REG) {
+void Z80::INC(GB_BY &REG) {
 	SetFlag(FLAG_NEGA, 0);
 	REG++;
 	SetFlag(FLAG_ZERO, REG == 0);
 	SetFlag(FLAG_HACA, (REG ^ (REG - 1)) & 0x10);
 }
-inline void Z80::DEC(GB_BY &REG) {
+void Z80::DEC(GB_BY &REG) {
 	SetFlag(FLAG_NEGA, 1);
 	REG--;
 	SetFlag(FLAG_ZERO, REG == 0);
 	SetFlag(FLAG_HACA, (REG ^ (REG + 1)) & 0x10);
 }
-inline void Z80::EXADD(GB_BY HREG, GB_BY LREG) {
+void Z80::EXADD(GB_BY HREG, GB_BY LREG) {
 	GB_BY by = _Memory.MemoryRead(HREG << 8 | LREG);
 	GB_DB HL = _REG.H << 8 | _REG.L;
 	uint32_t re = HL + by;
@@ -1028,7 +1003,7 @@ inline void Z80::EXADD(GB_BY HREG, GB_BY LREG) {
 }
 
 
-inline void Z80::SWAP(GB_BY &REG) {
+void Z80::SWAP(GB_BY &REG) {
 	GB_BY tmpl = REG & 0xF;
 	GB_BY tmph = REG & 0xF0;
 	REG =(tmph >> 4) | (tmpl<<4);
@@ -1039,7 +1014,7 @@ inline void Z80::SWAP(GB_BY &REG) {
 
 }
 
-inline void Z80::RLC(GB_BY &REG) {
+void Z80::RLC(GB_BY &REG) {
 	int arg = REG;
 	int re = (arg << 1) & 0xff;
 	if ((arg&(1 << 7)) != 0) {
@@ -1055,7 +1030,7 @@ inline void Z80::RLC(GB_BY &REG) {
 	SetFlag(FLAG_HACA, 0);
 	REG = re;
 }
-inline void Z80::RL(GB_BY &REG) {
+void Z80::RL(GB_BY &REG) {
 	int arg = REG;
 	int re = (arg << 1) & 0xff;
 	re |= GetFlag(FLAG_CARY)?1:0;
@@ -1065,7 +1040,7 @@ inline void Z80::RL(GB_BY &REG) {
 	SetFlag(FLAG_CARY, (arg&(1<<7))!=0);
 	REG = re;
 }
-inline void Z80::RRC(GB_BY &REG) {
+void Z80::RRC(GB_BY &REG) {
 	int arg = REG;
 	int re = arg >> 1;
 	if ((arg&1)==1) {
@@ -1082,7 +1057,7 @@ inline void Z80::RRC(GB_BY &REG) {
 	REG = re;
 
 }
-inline void Z80::RR(GB_BY &REG) {
+void Z80::RR(GB_BY &REG) {
 	int arg = REG;
 	int re = arg >> 1;
 	re |= GetFlag(FLAG_CARY) ? 0x80 : 0;
@@ -1092,8 +1067,7 @@ inline void Z80::RR(GB_BY &REG) {
 	SetFlag(FLAG_CARY, (arg&1)!= 0);
 	REG = re;
 }
-//MSB
-inline void Z80::SLA(GB_BY &REG) {
+void Z80::SLA(GB_BY &REG) {
 	GB_BY by = 0x80 & REG;
 	REG <<= 1;
 	SetFlag(FLAG_ZERO, REG == 0);
@@ -1102,7 +1076,7 @@ inline void Z80::SLA(GB_BY &REG) {
 	SetFlag(FLAG_CARY, by & 0x80);
 
 }
-inline void Z80::SRA(GB_BY &REG) {
+void Z80::SRA(GB_BY &REG) {
 	GB_BY by = 0x80 & REG;
 	GB_BY c = 0x1 & REG;
 	REG >>= 1;
@@ -1112,7 +1086,7 @@ inline void Z80::SRA(GB_BY &REG) {
 	SetFlag(FLAG_HACA, 0);
 	SetFlag(FLAG_CARY, c & 0x1);
 }
-inline void Z80::SRL(GB_BY &REG) {
+void Z80::SRL(GB_BY &REG) {
 	GB_BY by = 0x1 & REG;
 	REG >>= 1;
 	SetFlag(FLAG_ZERO, REG == 0);
@@ -1121,22 +1095,22 @@ inline void Z80::SRL(GB_BY &REG) {
 	SetFlag(FLAG_CARY, by & 0x1);
 }
 
-inline void Z80::BIT(GB_BY REG, GB_BY No) {
+void Z80::BIT(GB_BY REG, GB_BY No) {
 	SetFlag(FLAG_ZERO, (~REG & (1 << No)));
 	SetFlag(FLAG_NEGA, 0);
 	SetFlag(FLAG_HACA, 1);
 }
-inline void Z80::RST() {
+void Z80::RST() {
 	_REG.SP -= 2;
 	_Memory.MemoryWrite(_REG.SP+1 , (_REG.PC >> 8) & 0xFF);
 	_Memory.MemoryWrite(_REG.SP, _REG.PC & 0xFF);
 	
 }
-inline void Z80::JP() {
+void Z80::JP() {
 	_REG.PC = _Memory.MemoryRead(_REG.PC) | _Memory.MemoryRead(_REG.PC + 1) << 8;
 	
 }
-inline void Z80::CALL() {
+void Z80::CALL() {
 	_REG.SP -= 2;
 	_Memory.MemoryWrite(_REG.SP+1, ((_REG.PC + 2) >> 8) & 0xFF);
 	_Memory.MemoryWrite(_REG.SP, (_REG.PC + 2) & 0xFF);
