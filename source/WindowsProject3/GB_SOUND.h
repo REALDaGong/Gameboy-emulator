@@ -1,4 +1,5 @@
 #pragma once
+
 #include "GB.h"
 
 
@@ -11,26 +12,28 @@
 class SoundTimer {
 private:
 	uint32_t Timer;
-	
+
 public:
 	uint32_t Limit;
+
 	SoundTimer() {
 		Limit = 16384;
 		Timer = 0;
 	}
+
 	~SoundTimer() {};
+
 	GB_BY ClockUp(GB_BY delta) {
 		Timer += delta;
-		if (Timer >= Limit)
-		{
+		if (Timer >= Limit) {
 			Timer -= Limit;
 			return 1;
 		}
-			
 		else
 			return 0;
 	}
 };
+
 class FrameSequencer {
 private:
 	SoundTimer _Timer;
@@ -40,13 +43,16 @@ private:
 	GB_BY Clock;
 public:
 	void Count();
+
 	void ActiveLC();
+
 	void ActiveEv();
+
 	void ActiveSw();
 };
 
 
-class LengthCounter{//16384
+class LengthCounter {//16384
 private:
 	SoundTimer _Timer;
 	GB_BY Data;
@@ -56,6 +62,7 @@ private:
 public:
 	void load(GB_BY data);
 };
+
 class Envelope {//65536
 private:
 	SoundTimer _Timer;
@@ -64,8 +71,10 @@ private:
 	GB_BY Enabled;
 public:
 	void newVolume();
+
 	void load();
 };
+
 class Sweep {//32768
 private:
 	SoundTimer _Timer;
@@ -73,13 +82,18 @@ private:
 	GB_BY Enabled;
 public:
 	void trigger();
+
 	void load();
+
 	void checkOverflow();
+
 	void analyze();
 };
+
 class NoiseChannal {
 
 };
+
 class Channal {
 
 };
