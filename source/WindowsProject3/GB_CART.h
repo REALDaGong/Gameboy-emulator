@@ -119,7 +119,8 @@ public:
 			case 0x1000:
 				if ((val & 0xF) == 0xA) {
 					cart.RamEnable = 1;
-				} else {
+				}
+				else {
 					cart.RamEnable = 0;
 				}
 				break;
@@ -128,7 +129,8 @@ public:
 				RomBankNum = val & 0x1f;
 				if (Mode == ROM_BANKING_MODE) {
 					SwitchROMBank();
-				} else {
+				}
+				else {
 					if (RomBankNum == 0)
 						cart.CurrentROMBank = cart.ROM + 0x4000;
 					else
@@ -140,7 +142,8 @@ public:
 				RamOrRomUpper = val & 3;
 				if (Mode == ROM_BANKING_MODE) {
 					SwitchROMBank();
-				} else {
+				}
+				else {
 					cart.CurrentRAMBank = cart.RAM + RamOrRomUpper * 0x2000;
 				}
 				break;
@@ -150,7 +153,8 @@ public:
 				if (val == 1) {
 					Mode = RAM_BANKING_MODE;
 					cart.CurrentROMBank = cart.ROM + (RomBankNum & 0x1F) * 0x4000;
-				} else {
+				}
+				else {
 					Mode = ROM_BANKING_MODE;
 					cart.CurrentRAMBank = cart.RAM;
 				}
@@ -195,7 +199,8 @@ public:
 			case 0x1000:
 				if ((val & 0xA) == 0xA) {
 					cart.RamEnable = 1;
-				} else {
+				}
+				else {
 					cart.RamEnable = 0;
 				}
 				break;

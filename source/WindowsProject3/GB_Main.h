@@ -84,7 +84,8 @@ int KeyEvent(KEYNAME keyname, KEYMOVE keymove) {
             default:
                 return 0;
         }
-    } else if (keymove == KY_RELESE) {
+    }
+    else if (keymove == KY_RELESE) {
         switch (keyname) {
             case KY_A:
                 memory._KeyRow[0] |= 0x1;

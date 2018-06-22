@@ -8,16 +8,19 @@ void GPU::GPUStep() {
 #define VRAM 3
 	if (*line > 143) {
 		*stat = (*stat) & 0xFC | Vb;
-	} else {
+	}
+	else {
 		GB_BY lastMode = (*stat) & 0x3;
 		GB_BY inter = 0;
 		if (gpuclock >= 376) {
 			*stat = (*stat) & 0xFC | OAM;
 			inter = (*stat) & 0x20;
-		} else if (gpuclock >= 204) {
+		}
+		else if (gpuclock >= 204) {
 			*stat = (*stat) & 0xFC | VRAM;
 
-		} else {
+		}
+		else {
 			*stat = (*stat) & 0xFC;
 			inter = (*stat) & 0x8;
 		}
@@ -177,13 +180,15 @@ void GPU::UpdateSprite() {
 				tmp = ptrSprite[i];
 				ptrSprite[i] = ptrSprite[i + 1];
 				ptrSprite[i + 1] = tmp;
-			} else {
+			}
+			else {
 				if (ptrSprite[i]->X <= ptrSprite[i + 1]->X) {
 					if (ptrSprite[i]->X != ptrSprite[i + 1]->X) {
 						tmp = ptrSprite[i];
 						ptrSprite[i] = ptrSprite[i + 1];
 						ptrSprite[i + 1] = tmp;
-					} else {
+					}
+					else {
 
 						if (ptrSprite[i]->No < ptrSprite[i + 1]->No) {
 							tmp = ptrSprite[i];
@@ -209,7 +214,8 @@ void GPU::UpdateSprite() {
 			if (ptrSprite[i]->Xfilp) {
 				j = 7;
 				Step = -1;
-			} else {
+			}
+			else {
 				j = 0;
 				Step = 1;
 			}
@@ -229,7 +235,8 @@ void GPU::UpdateSprite() {
 						else
 							_Screen[X][*line] = (1 + _Sprite[X][*line]) << 2;
 					}
-				} else {
+				}
+				else {
 					if (_Sprite[X][*line] != 0) {
 						if (ptrSprite[i]->PlaNo)
 							_Screen[X][*line] = (1 + _Sprite[X][*line]) << 4;
@@ -272,7 +279,8 @@ inline void GPU::CheckLCDCInter() {
 		_Memory._memory_mapio[STAT - 0xFF00] |= 0x4;
 		if (_Memory._memory_mapio[STAT - 0xFF00] & 0x40)
 			_Memory._memory_mapio[0xF] |= 0x2;
-	} else {
+	}
+	else {
 		_Memory._memory_mapio[STAT - 0xFF00] &= 0xFB;
 	}
 

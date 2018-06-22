@@ -20,7 +20,8 @@ void Z80::Step() {
 		_Timer.TimerInc(delta);
 		_GPU.AddClock(delta);
 		_Memory.SendClock(delta);
-	} else {
+	}
+	else {
 		_Timer.TimerInc(4);
 		_GPU.AddClock(4);
 		_Memory.SendClock(4);
@@ -1083,7 +1084,8 @@ void Z80::InitOpCodeList() {
 			if (GetFlag(FLAG_CARY)) {
 				tmp = (tmp - 0x60) & 0xff;
 			}
-		} else {
+		}
+		else {
 			if (GetFlag(FLAG_HACA) || (tmp & 0xf) > 9) {
 				tmp += 0x06;
 			}
@@ -2648,7 +2650,8 @@ void Z80::RLC(GB_BY &REG) {
 	if ((arg & (1 << 7)) != 0) {
 		re |= 1;
 		SetFlag(FLAG_CARY, 1);
-	} else {
+	}
+	else {
 		SetFlag(FLAG_CARY, 0);
 
 	}
@@ -2675,7 +2678,8 @@ void Z80::RRC(GB_BY &REG) {
 	if ((arg & 1) == 1) {
 		re |= (1 << 7);
 		SetFlag(FLAG_CARY, 1);
-	} else {
+	}
+	else {
 		SetFlag(FLAG_CARY, 0);
 
 	}

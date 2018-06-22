@@ -19,7 +19,8 @@ void Memory::LoadRom(const char *dir) {
             _memory_exteral_ram = Cart->CurrentRAMBank;
             _memory_rom_bank = Cart->CurrentROMBank;
         }
-    } else {
+    }
+    else {
         //if no cart.
         _memory_rom_bank = new GB_BY[0x4000];
         if (haveRam) {
@@ -53,7 +54,8 @@ GB_BY Memory::MemoryRead(GB_DB ad) {
             if (_inbios) {
                 if (ad < 0x101)return _memory_bios[ad];
 
-            } else {
+            }
+            else {
                 return _memory_rom_bank0[ad];
             }
             //ROM0
@@ -82,7 +84,8 @@ GB_BY Memory::MemoryRead(GB_DB ad) {
                     if (Cart->_RamSize == 0x2000) {
                         if (Cart->CurrentRAMBank == Cart->RAM) {
                             return _memory_exteral_ram[ad & 0x1FFF];
-                        } else {
+                        }
+                        else {
                             return 0xFF;
                         }
                     }
@@ -92,12 +95,14 @@ GB_BY Memory::MemoryRead(GB_DB ad) {
                                 return _memory_exteral_ram[ad & 0x1FFF];
                             else
                                 return 0xFF;
-                        } else {
+                        }
+                        else {
                             return 0xFF;
                         }
                     }
 
-                } else
+                }
+                else
                     return 0xFF;
             }
 
@@ -114,7 +119,8 @@ GB_BY Memory::MemoryRead(GB_DB ad) {
                 return _memory_working_ram[ad & 0x1FFF];
             else if ((ad & 0xFFF) < 0xEA0) {//OAM
                 return _memory_oam[ad & 0xFF];
-            } else {
+            }
+            else {
                 //Zero,IO
                 if ((ad & 0xFF) < 0x80) {
                     if (ad == 0xFF00)return KeyRead();
@@ -124,7 +130,8 @@ GB_BY Memory::MemoryRead(GB_DB ad) {
                     }
 
                     return _memory_mapio[ad & 0xFF];
-                } else {
+                }
+                else {
                     return _memory_zero_ram[(ad & 0xFF) - 0x80];
                 }
             }
@@ -205,7 +212,8 @@ void Memory::MemoryWrite(GB_DB ad, GB_BY val) {
                 _memory_working_ram[ad & 0x1FFF] = val;
             else if ((ad & 0xFFF) < 0xEA0) {//OAM
                 _memory_oam[ad & 0xFF] = val;
-            } else {
+            }
+            else {
                 //Zero,IO
                 if (ad < 0xFF80 && ad >= 0xFF00) {
                     if (ad == DIV) {
@@ -231,13 +239,17 @@ void Memory::MemoryWrite(GB_DB ad, GB_BY val) {
                         }
                         if (val & 0x80) {
                             _memory_mapio[ad & 0xFF] = (_memory_mapio[ad & 0xFF] & 0x7) + val;
-                        } else if (val & 0x40) {
+                        }
+                        else if (val & 0x40) {
                             _memory_mapio[ad & 0xFF] = (_memory_mapio[ad & 0xFF] & 0x87) + val;
-                        } else if (val & 0x20) {
+                        }
+                        else if (val & 0x20) {
                             _memory_mapio[ad & 0xFF] = (_memory_mapio[ad & 0xFF] & 0xC7) + val;
-                        } else if (val & 0x10) {
+                        }
+                        else if (val & 0x10) {
                             _memory_mapio[ad & 0xFF] = (_memory_mapio[ad & 0xFF] & 0xA7) + val;
-                        } else if (val & 0x8) {
+                        }
+                        else if (val & 0x8) {
                             _memory_mapio[ad & 0xFF] = (_memory_mapio[ad & 0xFF] & 0xF7) + val;
                         }
                         break;
@@ -257,15 +269,18 @@ void Memory::MemoryWrite(GB_DB ad, GB_BY val) {
                                 //with exteral clock,
                                 //never tranfer,never end.
                             }
-                        } else {
+                        }
+                        else {
                             IOPort.State = 0;
                         }
 
                     }
                     _memory_mapio[ad & 0xFF] = val;
-                } else if (ad >= 0xFF80) {
+                }
+                else if (ad >= 0xFF80) {
                     _memory_zero_ram[(ad & 0xFF) - 0x80] = val;
-                } else {
+                }
+                else {
                     return; //unused part;
                 }
             }
@@ -283,7 +298,8 @@ inline void Memory::KeyReset() {
 inline GB_BY Memory::KeyRead() {
     if (_KeyCol == 0x10) {
         return _KeyRow[0] | 0xD0;
-    } else if (_KeyCol == 0x20) {
+    }
+    else if (_KeyCol == 0x20) {
         return _KeyRow[1] | 0xE0;
     }
     return 0;

@@ -66,7 +66,8 @@ private:
 	inline void SetFlag(int cname, GB_BY val) {
 		if (val == 0) {
 			_REG.F &= (static_cast<GB_BY>(1) << cname) ^ 0xFF;
-		} else {
+		}
+		else {
 			_REG.F |= (static_cast<GB_BY>(1) << cname);
 		}
 	}

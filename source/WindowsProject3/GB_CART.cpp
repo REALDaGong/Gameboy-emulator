@@ -63,14 +63,16 @@ GB_BY Cartriage::MemoryRead(GB_DB ad) {
     if (_RamSize == 0x2000) {
         if (CurrentRAMBank == RAM) {
             return CurrentRAMBank[ad & 0x1FFF];
-        } else {
+        }
+        else {
             return 0xFF;
         }
     }
     if (_RamSize == 0x800) {
         if (CurrentRAMBank == RAM && (ad & 0x1FFF) < 0x800) {
             return CurrentRAMBank[ad & 0x1FFF];
-        } else {
+        }
+        else {
             return 0xFF;
         }
     }
