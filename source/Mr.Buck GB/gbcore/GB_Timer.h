@@ -5,9 +5,9 @@ class Timer {
 public:
 	void TimerInc(GB_BY delta);
 	Timer(Memory& memory) : _Memory(memory) {
-		ptrDIV = &_Memory._memory_mapio[0x4];
-		ptrTIMA = &_Memory._memory_mapio[0x5];
-		ptrTAC = &_Memory._memory_mapio[0x7];
+		ptrDIV = &_Memory._memoryMapio[0x4];
+		ptrTIMA = &_Memory._memoryMapio[0x5];
+		ptrTAC = &_Memory._memoryMapio[0x7];
 		Sub = Div = 0;
 	};
 	~Timer() {};

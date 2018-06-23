@@ -4,7 +4,7 @@ void Memory::LoadRom(const char* dir) {
 	//Load banks from ROM to rom bank0 and others
 	//work with Carts.
 	ifstream fin(dir,ios_base::in| ios_base::binary);
-	fin.read((char*)_memory_rom_bank0, 0x4000);
+	fin.read((char*)_memoryRomBank0, 0x4000);
 	
 	if (haveCart) {
 		haveCart = 0;
@@ -12,31 +12,32 @@ void Memory::LoadRom(const char* dir) {
 	}
 	int RomSize=0, RamSize=0, haveBettery=0, haveRam=0, haveMbc=0, CartType=0;
 	if (detectCartType(RomSize, RamSize, haveBettery, haveRam, haveMbc,CartType)) {
+		if (CartType > MBC2) { exit(0); }//only support mbc1 or mbc2 now.-
 		Cart = new Cartriage(RomSize, RamSize, haveBettery, haveRam, haveMbc,CartType);
 		Cart->LoadROM(dir);
 		haveCart = 1;
 		if (haveRam) {
-			_memory_exteral_ram = Cart->CurrentRAMBank;
-			_memory_rom_bank = Cart->CurrentROMBank;
+			_memoryExteralRam = Cart->CurrentRAMBank;
+			_memoryRomBank = Cart->CurrentROMBank;
 		}
 	}
 	else {
 		//if no cart.
-		_memory_rom_bank = new GB_BY[0x4000];
+		_memoryRomBank = new GB_BY[0x4000];
 		if (haveRam) {
-			_memory_exteral_ram = new GB_BY[0x2000];
+			_memoryExteralRam = new GB_BY[0x2000];
 		}
-		fin.read((char*)_memory_rom_bank, 0x4000);
+		fin.read((char*)_memoryRomBank, 0x4000);
 	}
 	fin.close();
 	
 }
 void Memory::Init() {
-	memset(_memory_graphics_ram, 0, sizeof(_memory_graphics_ram));
-	memset(_memory_working_ram, 0, sizeof(_memory_working_ram));
-	memset(_memory_mapio, 0, sizeof(_memory_mapio));
-	memset(_memory_oam, 0, sizeof(_memory_oam));
-	memset(_memory_zero_ram, 0, sizeof(_memory_zero_ram));
+	memset(_memoryGraphicsRam, 0, sizeof(_memoryGraphicsRam));
+	memset(_memoryWorkingRam, 0, sizeof(_memoryWorkingRam));
+	memset(_memoryMapio, 0, sizeof(_memoryMapio));
+	memset(_memoryOam, 0, sizeof(_memoryOam));
+	memset(_memoryZeroRam, 0, sizeof(_memoryZeroRam));
 	
 	KeyReset();
 	_inbios = 1;
@@ -54,24 +55,24 @@ GB_BY Memory::MemoryRead(GB_DB ad) {
 			
 		}
 		else {
-			return _memory_rom_bank0[ad];
+			return _memoryRomBank0[ad];
 		}
 		//ROM0
 	case 0x1000:
 	case 0x2000:
 	case 0x3000:
-		return _memory_rom_bank0[ad];
+		return _memoryRomBank0[ad];
 		//ROM1
 	case 0x4000:
 	case 0x5000:
 	case 0x6000:
 	case 0x7000:
-		return _memory_rom_bank[ad - 0x4000];
+		return _memoryRomBank[ad - 0x4000];
 		break;
 		//VRAM
 	case 0x8000:
 	case 0x9000:
-		return _memory_graphics_ram[ad & 0x1FFF];
+		return _memoryGraphicsRam[ad & 0x1FFF];
 		break;
 		//Ex RAM
 	case 0xA000:
@@ -81,7 +82,7 @@ GB_BY Memory::MemoryRead(GB_DB ad) {
 			if (Cart->RamEnable) {
 				if (Cart->_RamSize == 0x2000) {
 					if (Cart->CurrentRAMBank == Cart->RAM) {
-						return _memory_exteral_ram[ad & 0x1FFF];
+						return _memoryExteralRam[ad & 0x1FFF];
 					}
 					else {
 						return 0xFF;
@@ -90,7 +91,7 @@ GB_BY Memory::MemoryRead(GB_DB ad) {
 				if (Cart->_RamSize == 0x800) {
 					if (Cart->CurrentRAMBank == Cart->RAM) {
 						if ((ad & 0x1FFF) < 0x800)
-							return _memory_exteral_ram[ad & 0x1FFF];
+							return _memoryExteralRam[ad & 0x1FFF];
 						else
 							return 0xFF;
 					}
@@ -109,14 +110,14 @@ GB_BY Memory::MemoryRead(GB_DB ad) {
 	case 0xC000:
 	case 0xD000:
 	case 0xE000:
-		return _memory_working_ram[ad & 0x1FFF];
+		return _memoryWorkingRam[ad & 0x1FFF];
 		break;
 
 	case 0xF000:
 		if ((ad & 0xFFF)<0xE00)
-			return _memory_working_ram[ad & 0x1FFF];
+			return _memoryWorkingRam[ad & 0x1FFF];
 		else if ((ad & 0xFFF) < 0xEA0) {//OAM
-			return _memory_oam[ad & 0xFF];
+			return _memoryOam[ad & 0xFF];
 		}
 		else {
 			//Zero,IO
@@ -127,14 +128,15 @@ GB_BY Memory::MemoryRead(GB_DB ad) {
 						return IOPort.ReadData();
 				}
 				
-				return _memory_mapio[ad & 0xFF];
+				return _memoryMapio[ad & 0xFF];
 			}
 			else
 			{
-				return _memory_zero_ram[(ad & 0xFF) - 0x80];
+				return _memoryZeroRam[(ad & 0xFF) - 0x80];
 			}
 		}
 	}
+	return 0xFF;
 }
 
 void Memory::MemoryWrite(GB_DB ad, GB_BY val) {
@@ -156,15 +158,15 @@ void Memory::MemoryWrite(GB_DB ad, GB_BY val) {
 		
 		if (haveCart) {
 			Cart->SendMessage(ad, val);
-			_memory_exteral_ram = Cart->CurrentRAMBank;
-			_memory_rom_bank = Cart->CurrentROMBank;
+			_memoryExteralRam = Cart->CurrentRAMBank;
+			_memoryRomBank = Cart->CurrentROMBank;
 		}
 		
 		break;
 	//VRAM
 	case 0x8000:
 	case 0x9000:
-		_memory_graphics_ram[ad & 0x1FFF] = val;
+		_memoryGraphicsRam[ad & 0x1FFF] = val;
 		if (ad <= 0x97FF) {
 			UpdateTile(ad);
 		}
@@ -177,7 +179,7 @@ void Memory::MemoryWrite(GB_DB ad, GB_BY val) {
 			if (Cart->RamEnable) {
 				if (Cart->_RamSize == 0x2000) {
 					if (Cart->CurrentRAMBank == Cart->RAM) {
-						_memory_exteral_ram[ad & 0x1FFF] = val;
+						_memoryExteralRam[ad & 0x1FFF] = val;
 						
 					}
 					break;
@@ -185,39 +187,42 @@ void Memory::MemoryWrite(GB_DB ad, GB_BY val) {
 				if (Cart->_RamSize == 0x800) {
 					if (Cart->CurrentRAMBank == Cart->RAM) {
 						if ((ad & 0x1FFF) < 0x800) {
-							_memory_exteral_ram[ad & 0x1FFF] = val;
+							_memoryExteralRam[ad & 0x1FFF] = val;
 							
 						}
 					}
 					break;
 				}
-				_memory_exteral_ram[ad & 0x1FFF] = val;
+				_memoryExteralRam[ad & 0x1FFF] = val;
 			}
 		}break;
 	//Workplace,echo RAM
 	case 0xC000:
 	case 0xD000:
 	case 0xE000:
-		_memory_working_ram[ad&0x1FFF] = val;
+		_memoryWorkingRam[ad&0x1FFF] = val;
 		break;
 	
 	case 0xF000:
 		if (ad == 0xFF00) {
-			MemoryWrite(IF, MemoryRead(IF) | 0x10);//input
+			//MemoryWrite(IF, MemoryRead(IF) | 0x10);//input
 			KeyWrite(val);
 		}
 		if((ad&0xFFF)<0xE00)
-		_memory_working_ram[ad & 0x1FFF] = val;
+		_memoryWorkingRam[ad & 0x1FFF] = val;
 		else if ((ad & 0xFFF) < 0xEA0) {//OAM
-			_memory_oam[ad & 0xFF] = val;
+			_memoryOam[ad & 0xFF] = val;
 		}
 		else {
 			//Zero,IO
 			if (ad<0xFF80&&ad>=0xFF00) {
-				if (ad == DIV){_memory_mapio[ad & 0xFF] = 0; break;}
-				if (ad==LY){ _memory_mapio[ad & 0xFF] = 0; break; }
+				if (ad == LCDC) {
+					int a = 2;
+				}
+				if (ad == DIV){_memoryMapio[ad & 0xFF] = 0; break;}
+				if (ad==LY){ _memoryMapio[ad & 0xFF] = 0; break; }
 				if (ad == 0xFF4D) {
-					_memory_mapio[ad & 0xFF] = val == 1 ? 0x7F : 0x7E;
+					_memoryMapio[ad & 0xFF] = val == 1 ? 0x7F : 0x7E;
 				}
 				if (ad == DMA){
 					for (int i = 0; i < 0xA0; i++) {
@@ -230,19 +235,19 @@ void Memory::MemoryWrite(GB_DB ad, GB_BY val) {
 						val &= ~0x7;
 					}
 					if (val & 0x80) {
-						_memory_mapio[ad & 0xFF] = (_memory_mapio[ad & 0xFF] & 0x7) + val;
+						_memoryMapio[ad & 0xFF] = (_memoryMapio[ad & 0xFF] & 0x7) + val;
 					}
 					else if (val & 0x40) {
-						_memory_mapio[ad & 0xFF] = (_memory_mapio[ad & 0xFF] & 0x87) + val;
+						_memoryMapio[ad & 0xFF] = (_memoryMapio[ad & 0xFF] & 0x87) + val;
 					}
 					else if (val & 0x20) {
-						_memory_mapio[ad & 0xFF] = (_memory_mapio[ad & 0xFF] & 0xC7) + val;
+						_memoryMapio[ad & 0xFF] = (_memoryMapio[ad & 0xFF] & 0xC7) + val;
 					}
 					else if (val & 0x10) {
-						_memory_mapio[ad & 0xFF] = (_memory_mapio[ad & 0xFF] & 0xA7) + val;
+						_memoryMapio[ad & 0xFF] = (_memoryMapio[ad & 0xFF] & 0xA7) + val;
 					}
 					else if (val & 0x8) {
-						_memory_mapio[ad & 0xFF] = (_memory_mapio[ad & 0xFF] & 0xF7) + val;
+						_memoryMapio[ad & 0xFF] = (_memoryMapio[ad & 0xFF] & 0xF7) + val;
 					}
 					break;
 				}
@@ -267,18 +272,22 @@ void Memory::MemoryWrite(GB_DB ad, GB_BY val) {
 						}
 					
 				}
-				_memory_mapio[ad&0xFF] = val;
+				_memoryMapio[ad&0xFF] = val;
 			}
 			else if(ad>=0xFF80)
 			{
-				_memory_zero_ram[(ad & 0xFF)-0x80] = val;
+				if (ad == 0xFFA5) {
+					int a;
+					a = 2;
+				}
+				_memoryZeroRam[(ad & 0xFF)-0x80] = val;
 			}
 			else {
 				return; //unused part;
 			}
 		}
 	}
-		
+	return;
 }
 //joypad part
 inline void Memory::KeyReset() {
@@ -287,15 +296,18 @@ inline void Memory::KeyReset() {
 	_KeyRow[1] = 0x0F;
 }
 inline GB_BY Memory::KeyRead() {
-	if (_KeyCol == 0x10) {
-		return _KeyRow[0]|0xD0;
+	if (_KeyCol & 0x10) {
+		return _KeyRow[0];
 	}
-	else if(_KeyCol==0x20){
-		return _KeyRow[1]|0xE0;
-	}return 0;
+	else if(_KeyCol & 0x20){
+		return _KeyRow[1];
+	}
+	return 0xF;
 }
 inline void Memory::KeyWrite(GB_BY val) {
 	_KeyCol = val & 0x30;
+	_memoryMapio[0] &= 0xF;
+	_memoryMapio[0] |= val & 0x30;
 }
 
 
@@ -303,8 +315,8 @@ void Memory::UpdateTile(GB_DB ad) {
 	GB_DB TileNo = (ad - 0x8000) / 16;
 
 	for (int i = 0; i < 8; i++) {
-		GB_BY Byte1 = _memory_graphics_ram[TileNo * 16 + i * 2];
-		GB_BY Byte2 = _memory_graphics_ram[TileNo * 16 + i * 2 + 1];
+		GB_BY Byte1 = _memoryGraphicsRam[TileNo * 16 + i * 2];
+		GB_BY Byte2 = _memoryGraphicsRam[TileNo * 16 + i * 2 + 1];
 		for (int j = 0; j < 8; j++) {
 			TileSet[TileNo][j][i] = ((Byte1 >> (7 - j)) & 1) + ((Byte2 >> (7 - j)) & 1) * 2;
 		}
@@ -314,10 +326,10 @@ void Memory::UpdateTile(GB_DB ad) {
 
 int Memory::detectCartType(int &RomSize, int &RamSize, int &haveBettery, int &haveRam, int &haveMbc,int &CartType) {
 
-	if (_memory_rom_bank0[0x148]<8)
-		RomSize = (1 << 15) << _memory_rom_bank0[0x148];
+	if (_memoryRomBank0[0x148]<8)
+		RomSize = (1 << 15) << _memoryRomBank0[0x148];
 	else
-		switch (_memory_rom_bank0[0x148])
+		switch (_memoryRomBank0[0x148])
 		{
 		case 0x52:
 			RomSize = 1152 * 1024;
@@ -330,7 +342,7 @@ int Memory::detectCartType(int &RomSize, int &RamSize, int &haveBettery, int &ha
 		}
 
 
-	switch (_memory_rom_bank0[0x149]) {
+	switch (_memoryRomBank0[0x149]) {
 	case 0:
 		RamSize = 0;
 		break;
@@ -347,7 +359,7 @@ int Memory::detectCartType(int &RomSize, int &RamSize, int &haveBettery, int &ha
 		RamSize = 0;
 	}
 	if (RamSize != 0)haveRam = 1;
-	CartType = _memory_rom_bank0[0x147];
+	CartType = _memoryRomBank0[0x147];
 	switch (CartType) {
 	case 0://ROM only
 		CartType = 0;
@@ -420,9 +432,9 @@ void Memory::SendClock(GB_BY delta) {
 	if (IOPort.State==1) {
 		IOPort.addClock(delta);
 		if (IOPort.State == 0) {
-			_memory_mapio[0x0f] |= 0x08;
-			_memory_mapio[0x02] = 0;
-			_memory_mapio[0x01] = 0;
+			_memoryMapio[0x0f] |= 0x08;
+			_memoryMapio[0x02] = 0;
+			_memoryMapio[0x01] = 0;
 		}
 	}
 }

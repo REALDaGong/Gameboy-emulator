@@ -10,10 +10,10 @@ public:
 	Pixel _Sprite[SCREEN_MAX_X][SCREEN_MAX_Y];
 	Pixel _Window[SCREEN_MAX_X][SCREEN_MAX_Y];
 	GPU(Memory& memory) :_Memory(memory) {
-		line = &_Memory._memory_mapio[0x44];
-		stat = &_Memory._memory_mapio[0x41];
-		lcdc = &_Memory._memory_mapio[0x40];
-		lyc = &_Memory._memory_mapio[0x45];
+		line = &_Memory._memoryMapio[0x44];
+		stat = &_Memory._memoryMapio[0x41];
+		lcdc = &_Memory._memoryMapio[0x40];
+		lyc = &_Memory._memoryMapio[0x45];
 		memset(_Screen, 0, sizeof(_Screen));
 		memset(_Sprite, 0, sizeof(_Sprite));
 		memset(_Window, 0, sizeof(_Window));
@@ -40,7 +40,7 @@ public:
 				memset(_Screen, 0, sizeof(_Screen));
 				memset(_Sprite, 0, sizeof(_Sprite));
 				memset(_Window, 0, sizeof(_Window));
-				_Memory._memory_mapio[0x0f] |= 0x1;
+				_Memory._memoryMapio[0x0f] |= 0x1;
 			}
 			if (*line == *lyc)(*stat) |= 0x4;
 			else (*stat) &= ~0x4;
@@ -75,7 +75,7 @@ private:
 	void UpdateBackGround(GB_DB MapNoSt, GB_DB TileSt, GB_BY Mask);
 	void UpdateWindow(GB_DB MapNoSt, GB_DB TileSt, GB_BY Mask);
 	void CheckLCDCInter();
-	void CheckModeInter(GB_BY Mode);
+	
 
 	struct Sprite {
 		GB_BY X, Y, TileNo;

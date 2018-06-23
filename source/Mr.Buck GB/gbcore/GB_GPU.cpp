@@ -31,6 +31,7 @@ void GPU::GPUStep() {
 	if (gpuclock <= 0) {
 		gpuclock = 456;
 		(*line)++;
+		lcdc_happend = 0;
 		if (*line == 145) {
 			_Memory.MemoryWrite(IF, _Memory.MemoryRead(IF) | 0x1);
 			*stat = (*stat) & 0xFC | Vb;
@@ -44,6 +45,7 @@ void GPU::GPUStep() {
 		if (*line == 153) {
 			NewFrame();
 			(*line) = 0;
+			lcdc_happend = 0;
 		}
 		
 	}
@@ -60,12 +62,15 @@ void GPU::Newline() {
 	GB_DB WNMapNoSt = ((data&64)>>6?0x9C00:0x9800);
 	//start address
 	//Tile[X][Y]
-	UpdateBackGround(BGMapNoSt, TileSt, Mask);
-	if ((_Memory.MemoryRead(LCDC) >> 5) & 1) {
-		if (*line >= _Memory.MemoryRead(WY))
-			UpdateWindow(WNMapNoSt, TileSt, Mask);
+	GB_BY _LCDC = _Memory.MemoryRead(LCDC);
+	if (_LCDC & 1) {
+		UpdateBackGround(BGMapNoSt, TileSt, Mask);
+		if ((_LCDC >> 5) & 1) {
+			if (*line >= _Memory.MemoryRead(WY))
+				UpdateWindow(WNMapNoSt, TileSt, Mask);
+		}
 	}
-	if ((_Memory.MemoryRead(LCDC) >> 1) & 1) {
+	if ((_LCDC >> 1) & 1) {
 		UpdateSprite();
 	}
 }
@@ -103,22 +108,32 @@ void GPU::UpdateBackGround(GB_DB MapNoSt,GB_DB TileSt,GB_BY Mask) {
 void GPU::UpdateWindow(GB_DB MapNoSt, GB_DB TileSt, GB_BY Mask) {
 	GB_BY Xoffset;
 	GB_BY Yoffset;
-
-	Xoffset = _Memory.MemoryRead(WX)-7;
+	GB_BY _WX = _Memory.MemoryRead(WX);
+	if (_WX >= 160 && _WX <= 255)return;
+	Xoffset = _WX-7;
 	Yoffset = _Memory.MemoryRead(WY);
-
-	
-	
 	GB_BY TileY = (((*line)-Yoffset) / 8);
 	GB_DB FirstTileNo = TileY*32;
-	
+	GB_BY XMax;
+	if (Xoffset > 0xF8) {
+		XMax = Xoffset;
+	}
+	else {
+		XMax = 160;
+	}
 	GB_BY MinorYoffset = ((*line) - Yoffset) - TileY * 8;
 	GB_BY X = 0;
 	
 	GB_BY End = 0;
 	for (int k = 0; k < 20; k++) {
 		for (int i = 0; i < 8; i++) {
-			_Window[Xoffset + X++][*line] =_Memory.TileSet[((_Memory.MemoryRead((k & 31) + (GB_DB)TileY * 32 + MapNoSt) + Mask) & 0xff) + TileSt][i][MinorYoffset];
+			if (Xoffset + X > 0xF8) {
+				X++;
+			}
+			else {
+				_Window[Xoffset + X++][*line] = _Memory.TileSet[((_Memory.MemoryRead((k & 31) + (GB_DB)TileY * 32 + MapNoSt) + Mask) & 0xff) + TileSt][i][MinorYoffset];
+				
+			}
 			if (X + Xoffset >= 160) {
 				End = 1;
 				break;
@@ -126,7 +141,9 @@ void GPU::UpdateWindow(GB_DB MapNoSt, GB_DB TileSt, GB_BY Mask) {
 		}
 		if (End)break;
 	}
-	for (int i = Xoffset; i < SCREEN_MAX_X; i++) {
+	if (Xoffset > 0xF8)Xoffset = 0;
+
+	for (int i = Xoffset; i < XMax; i++) {
 		_Screen[i][*line] = _Window[i][*line];
 	}
 }
@@ -267,22 +284,16 @@ void GPU::NewFrame() {
 	
 }
 inline void GPU::CheckLCDCInter() {
-	//if (lcdc_happend) return;
-	if (_Memory._memory_mapio[LYC-0xFF00] == _Memory._memory_mapio[LY - 0xFF00]) {
-		_Memory._memory_mapio[STAT - 0xFF00] |= 0x4;
-		if(_Memory._memory_mapio[STAT - 0xFF00]&0x40)
-			_Memory._memory_mapio[0xF] |= 0x2;
+	if (lcdc_happend) return;
+	if (_Memory._memoryMapio[LYC-0xFF00] == _Memory._memoryMapio[LY - 0xFF00]) {
+		_Memory._memoryMapio[STAT - 0xFF00] |= 0x4;
+		if (_Memory._memoryMapio[STAT - 0xFF00] & 0x40) {
+			_Memory._memoryMapio[0xF] |= 0x2;
+			lcdc_happend = 1;
+		}
 	}
 	else {
-		_Memory._memory_mapio[STAT - 0xFF00] &= 0xFB;
+		_Memory._memoryMapio[STAT - 0xFF00] &= 0xFB;
 	}
 	
-}
-inline void GPU::CheckModeInter(GB_BY Mode) {
-	if (lcdc_happend) return;
-	if ((_Memory._memory_mapio[STAT - 0xFF00] >> (Mode + 3)) & 1)
-	{
-		_Memory._memory_mapio[0xF] |= 0x2;
-		lcdc_happend = 1;
-	}
 }

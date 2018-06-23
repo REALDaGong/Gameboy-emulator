@@ -1,0 +1,112 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="源文件">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="头文件">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="资源文件">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="头文件\gbcore">
+      <UniqueIdentifier>{be84e652-232c-4079-b610-bf5a910db06f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="头文件\win32">
+      <UniqueIdentifier>{8fff7a72-1bb8-4017-a491-3e04f90edefd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="源文件\win32">
+      <UniqueIdentifier>{5a1dbc68-29e4-428c-b94e-0ba58a2f4a6a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="源文件\gbcore">
+      <UniqueIdentifier>{80e71190-8cf2-4143-8982-43d0a0a59238}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="gbcore\GB.h">
+      <Filter>头文件\gbcore</Filter>
+    </ClInclude>
+    <ClInclude Include="gbcore\GB_CART.h">
+      <Filter>头文件\gbcore</Filter>
+    </ClInclude>
+    <ClInclude Include="gbcore\GB_CPU.h">
+      <Filter>头文件\gbcore</Filter>
+    </ClInclude>
+    <ClInclude Include="gbcore\GB_GPU.h">
+      <Filter>头文件\gbcore</Filter>
+    </ClInclude>
+    <ClInclude Include="gbcore\GB_Main.h">
+      <Filter>头文件\gbcore</Filter>
+    </ClInclude>
+    <ClInclude Include="gbcore\GB_MEMORY.h">
+      <Filter>头文件\gbcore</Filter>
+    </ClInclude>
+    <ClInclude Include="gbcore\GB_SERIALIO.h">
+      <Filter>头文件\gbcore</Filter>
+    </ClInclude>
+    <ClInclude Include="gbcore\GB_SOUND.h">
+      <Filter>头文件\gbcore</Filter>
+    </ClInclude>
+    <ClInclude Include="gbcore\GB_Timer.h">
+      <Filter>头文件\gbcore</Filter>
+    </ClInclude>
+    <ClInclude Include="win32\resource.h">
+      <Filter>头文件\win32</Filter>
+    </ClInclude>
+    <ClInclude Include="win32\stdafx.h">
+      <Filter>头文件\win32</Filter>
+    </ClInclude>
+    <ClInclude Include="win32\targetver.h">
+      <Filter>头文件\win32</Filter>
+    </ClInclude>
+    <ClInclude Include="win32\WindowsProject.h">
+      <Filter>头文件\win32</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="gbcore\GB_CART.cpp">
+      <Filter>源文件\gbcore</Filter>
+    </ClCompile>
+    <ClCompile Include="gbcore\GB_CPU.cpp">
+      <Filter>源文件\gbcore</Filter>
+    </ClCompile>
+    <ClCompile Include="gbcore\GB_GPU.cpp">
+      <Filter>源文件\gbcore</Filter>
+    </ClCompile>
+    <ClCompile Include="gbcore\GB_MEMORY.cpp">
+      <Filter>源文件\gbcore</Filter>
+    </ClCompile>
+    <ClCompile Include="gbcore\GB_SERIALIO.cpp">
+      <Filter>源文件\gbcore</Filter>
+    </ClCompile>
+    <ClCompile Include="gbcore\GB_SOUND.cpp">
+      <Filter>源文件\gbcore</Filter>
+    </ClCompile>
+    <ClCompile Include="gbcore\GB_Timer.cpp">
+      <Filter>源文件\gbcore</Filter>
+    </ClCompile>
+    <ClCompile Include="win32\stdafx.cpp">
+      <Filter>源文件\win32</Filter>
+    </ClCompile>
+    <ClCompile Include="win32\WindowsProject.cpp">
+      <Filter>源文件\win32</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="win32\Big.ico">
+      <Filter>资源文件</Filter>
+    </Image>
+    <Image Include="win32\small.ico">
+      <Filter>资源文件</Filter>
+    </Image>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="win32\WindowsProject.rc">
+      <Filter>资源文件</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+</Project>

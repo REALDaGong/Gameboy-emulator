@@ -200,7 +200,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		break;
 	case WM_KEYDOWN:
 	{using namespace GBCore;
-
+	memory._memoryMapio[0] |= 0x10;
 		switch (wParam) {
 			
 		case VK_LEFT:
@@ -232,7 +232,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		break;
 	case WM_KEYUP:
 	{using namespace GBCore;
-
+	memory._memoryMapio[0] |= 0x10;
 		switch (wParam) {
 		case VK_LEFT:
 			memory._KeyRow[1] |= 0x2;

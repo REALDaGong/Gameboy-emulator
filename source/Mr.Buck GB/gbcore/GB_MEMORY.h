@@ -16,12 +16,12 @@ public:
 		Init(); 
 		Cart = NULL;
 		haveCart = 0; 
-		_memory_rom_bank = NULL;
+		_memoryRomBank = NULL;
 		memset(TileSet, 0, sizeof(TileSet));
 	};
 	~Memory() { 
 		if (haveCart)delete Cart;
-		else delete[]_memory_rom_bank;
+		else delete[]_memoryRomBank;
 	};
 	GB_BY MemoryRead(GB_DB ad);
 	void MemoryWrite(GB_DB ad, GB_BY v);
@@ -31,7 +31,7 @@ public:
 	
 	void SendClock(GB_BY del);//only to timing Serial IO.
 	
-	GB_BY _memory_mapio[0x80];
+	GB_BY _memoryMapio[0x80];
 	GB_BY _inbios;
 	GB_BY _KeyRow[2];
 	GB_BY TileSet[384][8][8];
@@ -61,15 +61,14 @@ public:
 		0xF5, 0x06, 0x19, 0x78, 0x86, 0x23, 0x05, 0x20, 0xFB, 0x86, 0x20, 0xFE, 0x3E, 0x01, 0xE0, 0x50,0xED
 	};
 private:
-	GB_BY delta;
 	
-	GB_BY _memory_rom_bank0[0x4000];
-	GB_BY *_memory_rom_bank;
-	GB_BY _memory_graphics_ram[0x2000];
-	GB_BY *_memory_exteral_ram;
-	GB_BY _memory_working_ram[0x2000];
-	GB_BY _memory_oam[0x100];
-	GB_BY _memory_zero_ram[0x80];
+	GB_BY _memoryRomBank0[0x4000];
+	GB_BY *_memoryRomBank;
+	GB_BY _memoryGraphicsRam[0x2000];
+	GB_BY *_memoryExteralRam;
+	GB_BY _memoryWorkingRam[0x2000];
+	GB_BY _memoryOam[0x100];
+	GB_BY _memoryZeroRam[0x80];
 	
 	void KeyReset();
 	GB_BY KeyRead();
