@@ -204,28 +204,28 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		switch (wParam) {
 			
 		case VK_LEFT:
-			memory._KeyRow[1] &= 0xD;
-			break;
-		case VK_RIGHT:
-			memory._KeyRow[1] &= 0xE;
-			break;
-		case VK_UP:
-			memory._KeyRow[1] &= 0xB;
-			break;
-		case VK_DOWN:
-			memory._KeyRow[1] &= 0x7;
-			break;
-		case 0x5a://Z
-			memory._KeyRow[0] &= 0xE;
-			break;
-		case 0x58://X
 			memory._KeyRow[0] &= 0xD;
 			break;
-		case VK_RETURN:
+		case VK_RIGHT:
+			memory._KeyRow[0] &= 0xE;
+			break;
+		case VK_UP:
+			memory._KeyRow[0] &= 0xB;
+			break;
+		case VK_DOWN:
 			memory._KeyRow[0] &= 0x7;
 			break;
+		case 0x5a://Z
+			memory._KeyRow[1] &= 0xE;
+			break;
+		case 0x58://X
+			memory._KeyRow[1] &= 0xD;
+			break;
+		case VK_RETURN:
+			memory._KeyRow[1] &= 0x7;
+			break;
 		case VK_SPACE:
-			memory._KeyRow[0] &= 0xB;
+			memory._KeyRow[1] &= 0xB;
 			break;
 		}
 	}
@@ -235,28 +235,28 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	memory._memoryMapio[0] |= 0x10;
 		switch (wParam) {
 		case VK_LEFT:
-			memory._KeyRow[1] |= 0x2;
-			break;
-		case VK_RIGHT:
-			memory._KeyRow[1] |= 0x1;
-			break;
-		case VK_UP:
-			memory._KeyRow[1] |= 0x4;
-			break;
-		case VK_DOWN:
-			memory._KeyRow[1] |= 0x8;
-			break;
-		case 0x5a://Z
-			memory._KeyRow[0] |= 0x1;
-			break;
-		case 0x58://X
 			memory._KeyRow[0] |= 0x2;
 			break;
-		case VK_RETURN:
+		case VK_RIGHT:
+			memory._KeyRow[0] |= 0x1;
+			break;
+		case VK_UP:
+			memory._KeyRow[0] |= 0x4;
+			break;
+		case VK_DOWN:
 			memory._KeyRow[0] |= 0x8;
 			break;
+		case 0x5a://Z
+			memory._KeyRow[1] |= 0x1;
+			break;
+		case 0x58://X
+			memory._KeyRow[1] |= 0x2;
+			break;
+		case VK_RETURN:
+			memory._KeyRow[1] |= 0x8;
+			break;
 		case VK_SPACE:
-			memory._KeyRow[0] |= 0x4;
+			memory._KeyRow[1] |= 0x4;
 			break;
 		}
 	}

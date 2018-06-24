@@ -17,11 +17,12 @@ public:
 		memset(_Screen, 0, sizeof(_Screen));
 		memset(_Sprite, 0, sizeof(_Sprite));
 		memset(_Window, 0, sizeof(_Window));
+		memset(ptrSprite, 0, sizeof(ptrSprite));
+		memset(sprite, 0, sizeof(sprite));
 		gpuclock = 456;
 		NewFrameFlag = 0;
 		lcdc_happend = 0;
-		memset(ptrSprite, 0, sizeof(ptrSprite));
-		memset(sprite, 0, sizeof(sprite));
+		
 	};
 	~GPU() {};
 	void AddClock(GPU_CLOCK delta) {
@@ -46,28 +47,23 @@ public:
 			else (*stat) &= ~0x4;
 		}
 	}
-	inline void SetNewFrameFlag(int a) {
-		NewFrameFlag = a > 0 ? 1 : 0;
-	}
-	inline int GetNewFrameFlag() {
-		return NewFrameFlag;
-	}
+	inline void SetNewFrameFlag(int a) {NewFrameFlag = a > 0 ? 1 : 0;}
+	inline int GetNewFrameFlag() {return NewFrameFlag;}
 private:
 	
 	int gpuclock;
 	void GPUStep();
 	Memory& _Memory;
 	
-	
 	GB_BY lcdc_happend;
 
 	GB_BY* line;
-	int NewFrameFlag;
 	GB_BY* lcdc;
 	GB_BY* stat;
 	GB_BY* lyc;
 
 	int justclosed;
+	int NewFrameFlag;
 
 	void Newline();
 	void NewFrame();
@@ -85,7 +81,7 @@ private:
 		GB_BY isRender;
 		GB_BY No;
 	}sprite[41];
-	Sprite *ptrSprite[41];
+	Sprite* ptrSprite[41];//used to speed up sorting procedure.
 
 
 };

@@ -12,13 +12,13 @@ void Memory::LoadRom(const char* dir) {
 	}
 	int RomSize=0, RamSize=0, haveBettery=0, haveRam=0, haveMbc=0, CartType=0;
 	if (detectCartType(RomSize, RamSize, haveBettery, haveRam, haveMbc,CartType)) {
-		if (CartType > MBC2) { exit(0); }//only support mbc1 or mbc2 now.-
+		if (CartType > MBC2) { exit(0); }//only support mbc1 or mbc2 now.
 		Cart = new Cartriage(RomSize, RamSize, haveBettery, haveRam, haveMbc,CartType);
 		Cart->LoadROM(dir);
 		haveCart = 1;
+		_memoryRomBank = Cart->CurrentROMBank;
 		if (haveRam) {
 			_memoryExteralRam = Cart->CurrentRAMBank;
-			_memoryRomBank = Cart->CurrentROMBank;
 		}
 	}
 	else {
@@ -291,16 +291,22 @@ void Memory::MemoryWrite(GB_DB ad, GB_BY val) {
 }
 //joypad part
 inline void Memory::KeyReset() {
-	_KeyCol = 0;
-	_KeyRow[0] = 0x0F;
-	_KeyRow[1] = 0x0F;
+	_KeyCol = 0;//bit 5=0 select Button keys (0x10)
+			   //bit 4=0 select Direction keys (0x20)
+			   //no all zeros
+
+	//bit=0 means pressed  0  1  2  3
+	//bit 4->Row 0
+	//bit 5->Row 1
+	_KeyRow[0] = 0x0F;//   R  L  U  D  	
+	_KeyRow[1] = 0x0F;//   A  B  Se St
 }
 inline GB_BY Memory::KeyRead() {
-	if (_KeyCol & 0x10) {
-		return _KeyRow[0];
-	}
-	else if(_KeyCol & 0x20){
+	if (_KeyCol == 0x10) {//select Button
 		return _KeyRow[1];
+	}
+	else if(_KeyCol == 0x20){//select Dir
+		return _KeyRow[0];
 	}
 	return 0xF;
 }
@@ -400,7 +406,7 @@ int Memory::detectCartType(int &RomSize, int &RamSize, int &haveBettery, int &ha
 		break;
 	case 0xF://MBC3+timer+battery
 	case 0x10://&+ram
-	case 0x11://none extra
+	case 0x11://no extra
 	case 0x12://+ram
 	case 0x13://&battery
 		CartType = MBC3;

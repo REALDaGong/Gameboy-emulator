@@ -13,7 +13,10 @@ static array<function<int()>, 0x100 * sizeof(int)> CBOpCode;
 
 
 void Z80::Step() {
-	
+	if (_REG.PC == 0x101) {
+		int a = 2;
+		//debug breakpoint here.
+	}
 	if (!isPause) {
 		Op = _Memory.MemoryRead(_REG.PC++);
 		delta = (GB_BY)OpCode[Op]();
@@ -30,9 +33,7 @@ void Z80::Step() {
 	if (_Memory.MemoryRead(IE)&_Memory.MemoryRead(IF)) {
 		isPause = 0;
 		if (_REG.IME) {
-			GB_BY _IE = _Memory.MemoryRead(IE);
-			GB_BY _IF = _Memory.MemoryRead(IF);
-			GB_BY IMEType = _IE & _IF;
+			GB_BY IMEType = _Memory.MemoryRead(IE) & _Memory.MemoryRead(IF);
 			Interrupt(IMEType);
 			_GPU.AddClock(20);
 			_Memory.SendClock(20);
@@ -391,11 +392,7 @@ void Z80::InitOpCodeList() {
 	OpCode[0x3B] = [&]()->int {_REG.SP--; return 8; };
 
 	//CB
-	OpCode[0xCB] = [&]()->int {
-		int tmp;
-		tmp = CBOpCode[_Memory.MemoryRead(_REG.PC++)]();
-		return tmp;
-	};
+	OpCode[0xCB] = [&]()->int { return CBOpCode[_Memory.MemoryRead(_REG.PC++)]();};
 	//SWAP
 	//p94
 	//flagf

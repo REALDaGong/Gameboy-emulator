@@ -78,20 +78,15 @@ void GPU::Newline() {
 void GPU::UpdateBackGround(GB_DB MapNoSt,GB_DB TileSt,GB_BY Mask) {
 	
 	
-	GB_BY Xoffset;
-	GB_BY Yoffset;
-	
-	Xoffset = _Memory.MemoryRead(SCX);
-	Yoffset = _Memory.MemoryRead(SCY);
-
-	
-
+	GB_BY Xoffset = _Memory.MemoryRead(SCX);
+	GB_BY Yoffset = _Memory.MemoryRead(SCY);
 	GB_BY TileX= Xoffset / 8;
 	GB_BY TileY = ((((*line) + Yoffset) & 255) / 8);
 	GB_DB FirstTileNo = ((((*line)+Yoffset)&255)/8)*32+Xoffset/8;//get the first(left up corner tile)'s No.
 	GB_BY MinorXoffset = Xoffset - TileX*8;
 	GB_BY MinorYoffset = Yoffset+(*line) - TileY*8;
 	GB_BY X = 0;
+
 	for (int i = MinorXoffset; i < 8; i++) {
 		_Screen[X++][*line] = _Memory.TileSet[((_Memory.MemoryRead(FirstTileNo+MapNoSt)+Mask)&0xff)+TileSt][i][MinorYoffset];
 	}
@@ -153,11 +148,13 @@ void GPU::UpdateWindow(GB_DB MapNoSt, GB_DB TileSt, GB_BY Mask) {
 void GPU::UpdateSprite() {
 	
 	memset(_Sprite, -1, sizeof(_Sprite));//-1 means sprite layer part is empty.
-	GB_BY mode8x16 = (_Memory.MemoryRead(LCDC) >> 2) & 1;
-	GB_BY PicSize = mode8x16 ? 16 : 8;
 	memset(sprite, 0, sizeof(sprite));
 	memset(ptrSprite, 0, sizeof(ptrSprite));
 	int Rendersize = 0;
+
+	GB_BY mode8x16 = (_Memory.MemoryRead(LCDC) >> 2) & 1;
+	GB_BY PicSize = mode8x16 ? 16 : 8;
+	//generate sprite list.
 	for (int i = 0; i < 40; i++) {
 		sprite[i].Y = _Memory.MemoryRead(0xFE00 + i * 4);
 		sprite[i].X = _Memory.MemoryRead(0xFE00 + i * 4 + 1);
@@ -183,8 +180,6 @@ void GPU::UpdateSprite() {
 	Sprite* tmp;
 	for (int j = 0; j < Rendersize-1; j++) {
 		for (int i = 0; i < Rendersize-1; i++) {
-
-			
 			if (ptrSprite[i]->Y > ptrSprite[i + 1]->Y) {
 				tmp = ptrSprite[i];
 				ptrSprite[i] = ptrSprite[i + 1];
@@ -198,7 +193,6 @@ void GPU::UpdateSprite() {
 						ptrSprite[i+1] = tmp;
 					}
 					else {
-
 						if (ptrSprite[i]->No < ptrSprite[i + 1]->No) {
 							tmp = ptrSprite[i];
 							ptrSprite[i] = ptrSprite[i + 1];
@@ -213,6 +207,7 @@ void GPU::UpdateSprite() {
 	
 	GB_BY X;
 	GB_BY Second;
+	//render.
 	for (int i = 0; i < 10; i++) {
 		Second = 0;
 		if (ptrSprite[i]) {
@@ -222,6 +217,7 @@ void GPU::UpdateSprite() {
 				MinorYoffset = PicSize-MinorYoffset-1;
 			}
 			if (MinorYoffset > 7) { Second = 1; MinorYoffset -= 8; }
+			
 			int j, Step;
 		
 			if (ptrSprite[i]->Xfilp) {
