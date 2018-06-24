@@ -13,13 +13,9 @@ static array<function<int()>, 0x100 * sizeof(int)> CBOpCode;
 
 
 void Z80::Step() {
-	if (_REG.PC == 0x101) {
-		int a = 2;
-		//debug breakpoint here.
-	}
 	if (!isPause) {
 		Op = _Memory.MemoryRead(_REG.PC++);
-		delta = (GB_BY)OpCode[Op]();
+		delta = OpCode[Op]();
 		_Timer.TimerInc(delta);
 		_GPU.AddClock(delta);
 		_Memory.SendClock(delta);
