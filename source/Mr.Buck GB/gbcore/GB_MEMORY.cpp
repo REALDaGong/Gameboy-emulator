@@ -12,7 +12,7 @@ void Memory::LoadRom(const char* dir) {
 	}
 	int RomSize=0, RamSize=0, haveBettery=0, haveRam=0, haveMbc=0, CartType=0;
 	if (detectCartType(RomSize, RamSize, haveBettery, haveRam, haveMbc,CartType)) {
-		if (CartType > MBC2) { exit(0); }//only support mbc1 or mbc2 now.
+		if (CartType > MBC3) { exit(0); }//only support mbc1 or mbc2 now.
 		Cart = new Cartriage(RomSize, RamSize, haveBettery, haveRam, haveMbc,CartType);
 		Cart->LoadROM(dir);
 		haveCart = 1;
@@ -80,6 +80,9 @@ GB_BY Memory::MemoryRead(GB_DB ad) {
 		
 		if (haveCart) {
 			if (Cart->RamEnable) {
+				if(Cart->mbc->RamBankNum>3){
+					return dynamic_cast<MBC_MBC3*>(Cart->mbc)->GetRTC();
+				}else
 				if (Cart->_RamSize == 0x2000) {
 					if (Cart->CurrentRAMBank == Cart->RAM) {
 						return _memoryExteralRam[ad & 0x1FFF];
@@ -99,7 +102,7 @@ GB_BY Memory::MemoryRead(GB_DB ad) {
 						return 0xFF;
 					}
 				}
-
+				return _memoryExteralRam[ad & 0x1FFF];
 			}
 			else
 				return 0xFF;
@@ -177,6 +180,9 @@ void Memory::MemoryWrite(GB_DB ad, GB_BY val) {
 		
 		if (haveCart) {
 			if (Cart->RamEnable) {
+				if (Cart->mbc->RamBankNum>3) {
+					dynamic_cast<MBC_MBC3*>(Cart->mbc)->SetRTC(val);
+				}else
 				if (Cart->_RamSize == 0x2000) {
 					if (Cart->CurrentRAMBank == Cart->RAM) {
 						_memoryExteralRam[ad & 0x1FFF] = val;
@@ -205,7 +211,6 @@ void Memory::MemoryWrite(GB_DB ad, GB_BY val) {
 	
 	case 0xF000:
 		if (ad == 0xFF00) {
-			//MemoryWrite(IF, MemoryRead(IF) | 0x10);//input
 			KeyWrite(val);
 		}
 		if((ad&0xFFF)<0xE00)
@@ -216,9 +221,6 @@ void Memory::MemoryWrite(GB_DB ad, GB_BY val) {
 		else {
 			//Zero,IO
 			if (ad<0xFF80&&ad>=0xFF00) {
-				if (ad == LCDC) {
-					int a = 2;
-				}
 				if (ad == DIV){_memoryMapio[ad & 0xFF] = 0; break;}
 				if (ad==LY){ _memoryMapio[ad & 0xFF] = 0; break; }
 				if (ad == 0xFF4D) {
@@ -303,10 +305,10 @@ inline void Memory::KeyReset() {
 }
 inline GB_BY Memory::KeyRead() {
 	if (_KeyCol == 0x10) {//select Button
-		return _KeyRow[1];
+		return _KeyRow[1]|0xD0;
 	}
 	else if(_KeyCol == 0x20){//select Dir
-		return _KeyRow[0];
+		return _KeyRow[0]|0xE0;
 	}
 	return 0xF;
 }
@@ -410,6 +412,10 @@ int Memory::detectCartType(int &RomSize, int &RamSize, int &haveBettery, int &ha
 	case 0x12://+ram
 	case 0x13://&battery
 		CartType = MBC3;
+		haveRam = 1;
+		haveBettery = 1;
+		haveCart = 1;
+		haveMbc = 1;
 		break;
 	case 0x15://mbc4
 	case 0x16://+ram

@@ -1,6 +1,6 @@
 #pragma once
 #include "GB.h"
-
+#include <ctime>
 /*
 directly used by MMU.
 manage cart info,alloc proper mem space to store data
@@ -12,9 +12,13 @@ public:
 
 	MBC() noexcept {};
 	virtual ~MBC() {};
-	virtual void Translate(GB_DB ad, GB_BY val) = 0;
+	virtual void Translate(const GB_DB ad,const GB_BY val) = 0;
 	virtual void SwitchROMBank() = 0;
 	virtual void SwitchRAMBank() = 0;
+	GB_BY RomBankNum;
+	GB_BY RamBankNum;
+private:
+
 };
 class Cartriage {
 
@@ -26,7 +30,8 @@ public:
 	friend class Memory;
 	friend class MBC_MBC1;
 	friend class MBC_MBC2;
-	//no mbc3 actually.....
+	friend class MBC_MBC3;
+	
 	Cartriage(int RomSize, int RamSize, int haveBattery, int haveRam, int haveMbc, int CartType) :
 		_RomSize(RomSize), _RamSize(RamSize), _haveBattery(haveBattery), _haveRam(haveRam), _haveMbc(haveMbc), _CartType(CartType)
 	{
@@ -37,41 +42,12 @@ public:
 		ROM = NULL;
 		RamEnable = 0;
 	}
-	~Cartriage() {
-		delete[] ROM;
-		if (_haveRam&&_haveBattery)
-		{
-			//save procedure
-			
-			int splace = Dir.find_last_of('\\');
-			int eplace = Dir.find_last_of('.');
-			string subDir = Dir.substr(splace + 1, eplace - splace - 1);
+	~Cartriage();
 
-
-			ofstream fout;
-			fout.open("C:\\"+subDir+".sav", ios::trunc | ios::out| ios::binary);
-			if (fout.is_open())
-			{
-				fout.write((char*)RAM, _RamSize);
-				fout.close();
-			}
-			delete[] RAM;
-		}
-		if (_haveMbc)
-			delete mbc;
-	}
-
-	//battery memory.
-	void MemoryWrite(GB_DB ad,GB_BY val);
-	GB_BY MemoryRead(GB_DB ad);
-
-	//return the Bank Pointer.
-	GB_BY* SendMessage(GB_DB ad, GB_BY Val) {
+	
+	void SendMessage(GB_DB ad, GB_BY Val) {
 		if (ad < 0x8000)mbc->Translate(ad, Val);
-		else {
-
-		}
-		return NULL;
+		else {}
 	}
 	
 
@@ -87,6 +63,7 @@ private:
 	int RamEnable;
 
 	MBC* mbc;
+
 };
 
 #define ROM_BANKING_MODE 0
@@ -97,60 +74,12 @@ class MBC_MBC1 :public MBC {
 public:
 	MBC_MBC1(Cartriage& ca) :cart(ca) { 
 		RomBankNum = 1;
+		RamBankNum = 0;
 		RamOrRomUpper = 0;
 		Mode = ROM_BANKING_MODE;
 	};
 	virtual ~MBC_MBC1() {};
-	virtual void Translate(GB_DB ad,GB_BY val) {
-		switch (ad&0xF000) {
-		case 0:
-		case 0x1000:
-			if ((val & 0xF) == 0xA) {
-				cart.RamEnable = 1;
-			}
-			else {
-				cart.RamEnable = 0;
-			}
-			break;
-		case 0x2000:
-		case 0x3000:
-			RomBankNum = val & 0x1f;
-			if (Mode == ROM_BANKING_MODE) {
-				SwitchROMBank();
-			}
-			else {
-				if (RomBankNum == 0)
-					cart.CurrentROMBank = cart.ROM + 0x4000;
-				else
-				cart.CurrentROMBank = cart.ROM + (RomBankNum&0x1F) * 0x4000;
-			}
-			break;
-		case 0x4000:
-		case 0x5000:
-			RamOrRomUpper = val & 3;
-			if (Mode == ROM_BANKING_MODE) {
-				SwitchROMBank();
-			}
-			else {
-				cart.CurrentRAMBank = cart.RAM+RamOrRomUpper*0x2000;
-			}
-			break;
-		case 0x6000:
-			
-		case 0x7000:
-			if (val == 1) {
-				Mode = RAM_BANKING_MODE;
-				cart.CurrentROMBank = cart.ROM + (RomBankNum & 0x1F) * 0x4000;
-			}
-			else {
-				Mode = ROM_BANKING_MODE;
-				cart.CurrentRAMBank = cart.RAM;
-			}
-			break;
-		default:
-			break;
-		}
-	}
+	virtual void Translate(const GB_DB ad, const GB_BY val);
 	virtual void SwitchROMBank() {
 		if (RomBankNum == 0 || RomBankNum == 0x20 || RomBankNum == 0x40 || RomBankNum == 0x60)
 			cart.CurrentROMBank = cart.ROM + (((RomBankNum & 0x1F) + ((RamOrRomUpper & 3) << 5)) + 1) * 0x4000;
@@ -162,8 +91,6 @@ public:
 	}
 private:
 	GB_BY Mode;
-	
-	GB_BY RomBankNum;
 	GB_BY RamOrRomUpper;
 
 	Cartriage & cart;
@@ -174,29 +101,10 @@ class MBC_MBC2 :public MBC {
 public:
 	MBC_MBC2(Cartriage& ca) :cart(ca) {
 		RomBankNum = 1;
+		RamBankNum = 0;
 	};
 	virtual ~MBC_MBC2() {};
-	virtual void Translate(GB_DB ad, GB_BY val) {
-		switch (ad & 0xF000) {
-		case 0:
-		case 0x1000:
-			if ((val & 0xA) == 0xA) {
-				cart.RamEnable = 1;
-			}
-			else {
-				cart.RamEnable = 0;
-			}
-			break;
-		case 0x2000:
-		case 0x3000:
-			RomBankNum = val & 0x1f;
-			
-			break;
-		
-		default:
-			break;
-		}
-	}
+	virtual void Translate(const GB_DB ad, const GB_BY val);
 	virtual void SwitchROMBank() {
 	
 	}
@@ -204,9 +112,71 @@ public:
 
 	}
 private:
-	GB_BY RomBankNum;
+	
 	Cartriage & cart;
 
 };
 
+class MBC_MBC3 :public MBC {
+public:
+	MBC_MBC3(Cartriage& ca);
+	virtual ~MBC_MBC3();
+	virtual void Translate(GB_DB ad, GB_BY val);
+	virtual void SwitchROMBank() {}
+	virtual void SwitchRAMBank() {}
+	GB_BY GetRamBankNum() { return RamOrRomUpper; }
+	GB_BY GetRTC() { return *RTC; }
+	void SetRTC(GB_BY val) {
+		
+		if (RTC == &RTC_DH) {
+			if ((val & 0x40)&&((*RTC)&0x40)==0) {//stop timer
+				active = 0;
+				UpdateTime();
+			}
+			else {//active timer
+				active = 1;
+				Active();
+			}
+		}
+		*RTC |= val&0xFE;//? is the day first bit can be changed?
+	}
+	void UpdateTime();
+	void Active();
+	
+private:
+	GB_BY Mode;
+	GB_BY RamOrRomUpper;
 
+	friend class Cartriage;
+	Cartriage & cart;
+	
+	GB_BY RTC_S;
+	GB_BY RTC_M;
+	GB_BY RTC_H;
+
+	GB_BY RTC_DL;
+	GB_BY RTC_DH;
+
+	GB_BY *RTC;
+	GB_BY active;
+	/*
+	 08h  RTC S   Seconds   0-59 (0-3Bh)
+	 09h  RTC M   Minutes   0-59 (0-3Bh)
+	 0Ah  RTC H   Hours     0-23 (0-17h)
+	 0Bh  RTC DL  Lower 8 bits of Day Counter (0-FFh)
+	 0Ch  RTC DH  Upper 1 bit of Day Counter, Carry Bit, Halt Flag
+        Bit 0  Most significant bit of Day Counter (Bit 8)
+        Bit 6  Halt (0=Active, 1=Stop Timer)
+        Bit 7  Day Counter Carry Bit (1=Counter Overflow)
+	*/
+	GB_BY RTCRamBank;
+	tm* oldtime;
+	time_t oldtimev;
+	struct timeDelta {
+		int day;
+		int hour;
+		int min;
+		int sec;
+	}Dtime;
+	void SubstractTime(timeDelta &tD,const tm* newtime);
+};
