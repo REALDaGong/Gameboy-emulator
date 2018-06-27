@@ -41,6 +41,7 @@ public:
 				memset(_Screen, 0, sizeof(_Screen));
 				memset(_Sprite, 0, sizeof(_Sprite));
 				memset(_Window, 0, sizeof(_Window));
+				gpuclock = 0;
 				_Memory._memoryMapio[0x0f] |= 0x1;
 			}
 			if (*line == *lyc)(*stat) |= 0x4;

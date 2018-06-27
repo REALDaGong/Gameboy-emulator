@@ -1,4 +1,5 @@
 #include "GB_Timer.h"
+
 const uint32_t Timer::TACtable[4] = { 1024,16,64,256 };
 void Timer::TimerInc(GB_BY delta) {
 	Div += delta;

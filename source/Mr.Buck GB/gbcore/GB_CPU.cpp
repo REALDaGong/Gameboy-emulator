@@ -13,6 +13,10 @@ static array<function<int()>, 0x100 * sizeof(int)> CBOpCode;
 
 
 void Z80::Step() {
+	if (_REG.PC == 0x7846) {
+		int a = 2;
+		//debug breakpoint here.
+	}
 	if (!isPause) {
 		Op = _Memory.MemoryRead(_REG.PC++);
 		delta = OpCode[Op]();

@@ -4,82 +4,61 @@
 
 
 //not use at all. 
+/*
 
 
+*/
 
-
-class SoundTimer {
-private:
-	uint32_t Timer;
-	
+class Sound {
 public:
-	uint32_t Limit;
-	SoundTimer() {
-		Limit = 16384;
-		Timer = 0;
-	}
-	~SoundTimer() {};
-	GB_BY ClockUp(GB_BY delta) {
-		Timer += delta;
-		if (Timer >= Limit)
-		{
-			Timer -= Limit;
-			return 1;
-		}
-			
-		else
-			return 0;
-	}
-};
-class FrameSequencer {
+	friend class Memory;
+	void ClockUp();
+	void SoundWrite(GB_DB ad,GB_BY val);
+	GB_BY SoundRead(GB_DB ad);
+	Sound();
+	~Sound() {};
 private:
-	SoundTimer _Timer;
-	LengthCounter LC[4];
-	Envelope Ev[3];
-	Sweep Sw;
-	GB_BY Clock;
-public:
-	void Count();
-	void ActiveLC();
-	void ActiveEv();
-	void ActiveSw();
-};
-
-
-class LengthCounter{//16384
-private:
-	SoundTimer _Timer;
-	GB_BY Data;
-	GB_BY Duty;
-	GB_BY Length;
-	GB_BY Enabled;
-public:
-	void load(GB_BY data);
-};
-class Envelope {//65536
-private:
-	SoundTimer _Timer;
-	GB_BY Data;
-	GB_BY Behaviour;
-	GB_BY Enabled;
-public:
-	void newVolume();
-	void load();
-};
-class Sweep {//32768
-private:
-	SoundTimer _Timer;
-	GB_BY Data;
-	GB_BY Enabled;
-public:
-	void trigger();
-	void load();
-	void checkOverflow();
-	void analyze();
-};
-class NoiseChannal {
-
-};
-class Channal {
-
+	GB_BY _NR10;
+	//p41
+	GB_BY _NR11;
+	//p42
+	GB_BY _NR12;
+	GB_BY _NR13;
+	GB_BY _NR14;
+	//p43
+	GB_BY _NR21;
+	//p44
+	GB_BY _NR22;
+	GB_BY _NR23;
+	GB_BY _NR24;
+	//p45
+	GB_BY _NR30;
+	GB_BY _NR31;
+	//p46
+	GB_BY _NR32;
+	GB_BY _NR33;
+	GB_BY _NR34;
+	//p47
+	GB_BY _NR41;
+	GB_BY _NR42;
+	//p48
+	GB_BY _NR43;
+	GB_BY _NR44;
+	//p49
+	GB_BY _NR50;
+	//p50
+	GB_BY _NR51;
+	//p51
+	GB_BY _NR52;
+	//FF30-3F Wave Pattern
+	GB_BY Partten[16];
+	struct Channel {
+		GB_BY tick;
+		GB_BY frequncy;
+		GB_BY initvolume;
+		GB_BY volume;
+		GB_BY direction;
+		GB_BY sweepNum;
+	};
+	Channel channel1, channel2;
 };
