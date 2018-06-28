@@ -12,7 +12,7 @@ void Memory::LoadRom(const char* dir) {
 	}
 	int RomSize=0, RamSize=0, haveBettery=0, haveRam=0, haveMbc=0, CartType=0;
 	if (detectCartType(RomSize, RamSize, haveBettery, haveRam, haveMbc,CartType)) {
-		if (CartType > MBC3) { exit(0); }//only support mbc1 or mbc2 now.
+		if (CartType > MBC3) { exit(0); }
 		Cart = new Cartriage(RomSize, RamSize, haveBettery, haveRam, haveMbc,CartType);
 		Cart->LoadROM(dir);
 		haveCart = 1;
@@ -278,10 +278,6 @@ void Memory::MemoryWrite(GB_DB ad, GB_BY val) {
 			}
 			else if(ad>=0xFF80)
 			{
-				if (ad == 0xFFA5) {
-					int a;
-					a = 2;
-				}
 				_memoryZeroRam[(ad & 0xFF)-0x80] = val;
 			}
 			else {

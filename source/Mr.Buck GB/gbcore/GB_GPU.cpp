@@ -1,7 +1,6 @@
 #include "GB_GPU.h"
 
 void GPU::GPUStep() {
-
 #define Hb 0
 #define Vb 1
 #define OAM 2
@@ -53,8 +52,6 @@ void GPU::GPUStep() {
 	
 }
 void GPU::Newline() {
-#define WINDOW 1
-#define SCREEN 0
 	GB_BY Mask =0;
 	GB_BY data = _Memory.MemoryRead(LCDC);
 	GB_DB TileSt = ((data&16)>>4?(Mask=0,0):(Mask=128,128));
@@ -76,8 +73,6 @@ void GPU::Newline() {
 }
 
 void GPU::UpdateBackGround(GB_DB MapNoSt,GB_DB TileSt,GB_BY Mask) {
-	
-	
 	GB_BY Xoffset = _Memory.MemoryRead(SCX);
 	GB_BY Yoffset = _Memory.MemoryRead(SCY);
 	GB_BY TileX= Xoffset / 8;
@@ -148,79 +143,53 @@ void GPU::UpdateWindow(GB_DB MapNoSt, GB_DB TileSt, GB_BY Mask) {
 void GPU::UpdateSprite() {
 	
 	memset(_Sprite, -1, sizeof(_Sprite));//-1 means sprite layer part is empty.
-	memset(sprite, 0, sizeof(sprite));
-	memset(ptrSprite, 0, sizeof(ptrSprite));
-	int Rendersize = 0;
+	spritelist.clear();
 
 	GB_BY mode8x16 = (_Memory.MemoryRead(LCDC) >> 2) & 1;
 	GB_BY PicSize = mode8x16 ? 16 : 8;
-	//generate sprite list.
+	//generate spritelist.
 	for (int i = 0; i < 40; i++) {
-		sprite[i].Y = _Memory.MemoryRead(0xFE00 + i * 4);
-		sprite[i].X = _Memory.MemoryRead(0xFE00 + i * 4 + 1);
+		sprite.Y = _Memory.MemoryRead(0xFE00 + i * 4);
+		sprite.X = _Memory.MemoryRead(0xFE00 + i * 4 + 1);
 
-		if (sprite[i].Y == 0 && sprite[i].X == 0||
-			((*line)<(sprite[i].Y-16)||(*line)>((sprite[i].Y-16)+PicSize-1)))sprite[i].isRender = 0;
+		if (sprite.Y == 0 && sprite.X == 0||
+			((*line)<(sprite.Y-16)||(*line)>((sprite.Y-16)+PicSize-1)))sprite.isRender = 0;
 		else {
-			sprite[i].Y -= 16;
-			sprite[i].X -= 8;
-			sprite[i].isRender = 1;
-			sprite[i].TileNo = _Memory.MemoryRead(0xFE00 + i * 4 + 2) &~mode8x16;
+			sprite.Y -= 16;
+			sprite.X -= 8;
+			sprite.isRender = 1;
+			sprite.TileNo = _Memory.MemoryRead(0xFE00 + i * 4 + 2) &~mode8x16;
 			GB_BY flag = _Memory.MemoryRead(0xFE00 + i * 4 + 3);
-			sprite[i].pirority = (flag >> 7) & 1;
-			sprite[i].Yfilp = (flag >> 6) & 1;
-			sprite[i].Xfilp = (flag >> 5) & 1;
-			sprite[i].PlaNo = (flag >> 4) & 1;
-			sprite[i].No = Rendersize;
-			ptrSprite[Rendersize++] = &sprite[i];
+			sprite.pirority = (flag >> 7) & 1;
+			sprite.Yfilp = (flag >> 6) & 1;
+			sprite.Xfilp = (flag >> 5) & 1;
+			sprite.PlaNo = (flag >> 4) & 1;
+			spritelist.push_back(sprite);
+			sprite.No = spritelist.size();
+			
 		}
-		if (Rendersize == 10)break;//max 10 per line
+		if (spritelist.size()==10)break;//max 10 per line
 	}
 	//sort them,the first will be rendered first,meaning lowest priority. 
-	Sprite* tmp;
-	for (int j = 0; j < Rendersize-1; j++) {
-		for (int i = 0; i < Rendersize-1; i++) {
-			if (ptrSprite[i]->Y > ptrSprite[i + 1]->Y) {
-				tmp = ptrSprite[i];
-				ptrSprite[i] = ptrSprite[i + 1];
-				ptrSprite[i+1] = tmp;
-			}
-			else {
-				if (ptrSprite[i]->X <= ptrSprite[i + 1]->X) {
-					if (ptrSprite[i]->X != ptrSprite[i + 1]->X) {
-						tmp = ptrSprite[i];
-						ptrSprite[i] = ptrSprite[i + 1];
-						ptrSprite[i+1] = tmp;
-					}
-					else {
-						if (ptrSprite[i]->No < ptrSprite[i + 1]->No) {
-							tmp = ptrSprite[i];
-							ptrSprite[i] = ptrSprite[i + 1];
-							ptrSprite[i+1] = tmp;
-						}
-
-					}
-				}
-			}
-		}
-	}
+	
+	sort(spritelist.begin(), spritelist.end(), comp);
 	
 	GB_BY X;
-	GB_BY Second;
+	GB_BY Second;//used in 8x16 mode
 	//render.
-	for (int i = 0; i < 10; i++) {
+	for (auto sp:spritelist) {
 		Second = 0;
-		if (ptrSprite[i]) {
-			GB_BY MinorYoffset = *line - ptrSprite[i]->Y;
+		
+			GB_BY MinorYoffset = *line - sp.Y;
 			
-			if (ptrSprite[i]->Yfilp) {
+			if (sp.Yfilp) {
 				MinorYoffset = PicSize-MinorYoffset-1;
 			}
 			if (MinorYoffset > 7) { Second = 1; MinorYoffset -= 8; }
 			
 			int j, Step;
 		
-			if (ptrSprite[i]->Xfilp) {
+			if (sp.Xfilp) {
 				j = 7;
 				Step = -1;
 			}
@@ -229,14 +198,14 @@ void GPU::UpdateSprite() {
 				Step = 1;
 			}
 			for (int n = 0; n < 8;n++) {
-				X = n + ptrSprite[i]->X;
+				X = n + sp.X;
 				
 				if (X >= SCREEN_MAX_X) { j += Step; continue; }
 				
-				_Sprite[X][*line] = _Memory.TileSet[Second+(ptrSprite[i]->TileNo)][j][MinorYoffset];
-				if (ptrSprite[i]->pirority) {
+				_Sprite[X][*line] = _Memory.TileSet[Second+(sp.TileNo)][j][MinorYoffset];
+				if (sp.pirority) {
 					if (_Screen[X][*line] == 0 && _Sprite[X][*line] != 0) {
-						if (ptrSprite[i]->PlaNo)
+						if (sp.PlaNo)
 							_Screen[X][*line] = (1 + _Sprite[X][*line]) << 4;
 						else
 							_Screen[X][*line] = (1 + _Sprite[X][*line]) << 2;
@@ -244,7 +213,7 @@ void GPU::UpdateSprite() {
 				}
 				else {
 					if (_Sprite[X][*line] != 0) {
-						if (ptrSprite[i]->PlaNo)
+						if (sp.PlaNo)
 							_Screen[X][*line] = (1 + _Sprite[X][*line]) << 4;
 						else
 							_Screen[X][*line] = (1 + _Sprite[X][*line]) << 2;
@@ -253,9 +222,6 @@ void GPU::UpdateSprite() {
 				j += Step;
 			}
 		}
-	}
-
-	
 }
 
 void GPU::NewFrame() {
@@ -291,5 +257,18 @@ inline void GPU::CheckLCDCInter() {
 	else {
 		_Memory._memoryMapio[STAT - 0xFF00] &= 0xFB;
 	}
-	
+}
+bool GPU::comp(const Sprite& a, const Sprite& b) {
+	if (a.X==b.X && a.Y==b.Y && a.No==b.No)return false;
+	if (a.Y > b.Y) {return false;}
+	else {
+		if (a.X <= b.X) {
+			if (a.X != b.X) {return false;}
+			else {
+				if (a.No < b.No) {return false;}
+
+			}
+		}
+	}
+	return true;
 }

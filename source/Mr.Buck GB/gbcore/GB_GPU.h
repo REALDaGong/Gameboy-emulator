@@ -17,8 +17,6 @@ public:
 		memset(_Screen, 0, sizeof(_Screen));
 		memset(_Sprite, 0, sizeof(_Sprite));
 		memset(_Window, 0, sizeof(_Window));
-		memset(ptrSprite, 0, sizeof(ptrSprite));
-		memset(sprite, 0, sizeof(sprite));
 		gpuclock = 456;
 		NewFrameFlag = 0;
 		lcdc_happend = 0;
@@ -57,13 +55,14 @@ private:
 	Memory& _Memory;
 	
 	GB_BY lcdc_happend;
+	int justclosed;
 
 	GB_BY* line;
 	GB_BY* lcdc;
 	GB_BY* stat;
 	GB_BY* lyc;
 
-	int justclosed;
+	
 	int NewFrameFlag;
 
 	void Newline();
@@ -81,8 +80,9 @@ private:
 		GB_BY PlaNo;
 		GB_BY isRender;
 		GB_BY No;
-	}sprite[41];
-	Sprite* ptrSprite[41];//used to speed up sorting procedure.
+	}sprite;
 
+	vector<Sprite>spritelist;
 
+	static bool comp(const Sprite&a, const Sprite&b);
 };
