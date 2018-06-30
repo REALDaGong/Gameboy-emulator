@@ -61,14 +61,7 @@ Cartriage::~Cartriage() {
 		if (fout.is_open())
 		{
 			fout.write((char*)RAM, _RamSize);
-			if (typeid(*mbc) == typeid(MBC_MBC3)) {
-				MBC_MBC3* tmp = dynamic_cast<MBC_MBC3*>(mbc);
-				//fout.write((char*)(tmp->RTC_S), 1);
-				//fout.write((char*)(tmp->RTC_M), 1);
-				//fout.write((char*)(tmp->RTC_H), 1);
-				//fout.write((char*)(tmp->RTC_DL), 1);
-				//fout.write((char*)(tmp->RTC_DH), 1);
-			}
+			
 			fout.close();
 
 		}
@@ -204,7 +197,7 @@ MBC_MBC3::~MBC_MBC3() {
 
 
 		ofstream fout;
-		fout.open(subDir + ".sav", ios::trunc | ios::out | ios::binary);
+		fout.open(subDir + ".tma", ios::trunc | ios::out | ios::binary);
 		if (fout.is_open())
 		{
 			
