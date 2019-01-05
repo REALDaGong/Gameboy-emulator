@@ -10,14 +10,35 @@ interrupt handler
 
 static array<function<int()>, 0x100 * sizeof(int)> OpCode;
 static array<function<int()>, 0x100 * sizeof(int)> CBOpCode;
-
-
+#define LO
+#ifdef LOG
+#include<iostream>
+#include<iomanip>
+#endif
 void Z80::Step() {
-	if (_REG.PC == 0x7846) {
-		int a = 2;
+#ifdef LOG
+	static int breakpoint = 0;
+	if (breakpoint==0&&_REG.PC > 0x100) {
+		if (freopen("E:\\out.log", "w", stdout)) {
+			breakpoint = 1;
+		}
 		//debug breakpoint here.
 	}
+#endif
 	if (!isPause) {
+#ifdef LOG
+		
+		if (breakpoint) {
+			
+			cout << "AF:" << hex << setw(4) << ((((GB_DB)_REG.A) << 8) | (_REG.F)) << endl;
+			cout << "BC:" << hex << setw(4) << ((((GB_DB)_REG.B) << 8) | (_REG.C)) << endl;
+			cout << "DE:" << hex << setw(4) << ((((GB_DB)_REG.D) << 8) | (_REG.E)) << endl;
+			cout << "HL:" << hex << setw(4) << ((((GB_DB)_REG.H) << 8) | (_REG.L)) << endl;
+			cout << "SP:" << hex << setw(4) << _REG.SP << endl;
+			cout << "PC:" << hex << setw(4) << _REG.PC << endl;
+			cout << "--------------------------------------------------------------------------------------------------------" << endl;
+		}
+#endif
 		Op = _Memory.MemoryRead(_REG.PC++);
 		delta = OpCode[Op]();
 		_Timer.TimerInc(delta);
@@ -37,6 +58,7 @@ void Z80::Step() {
 			Interrupt(IMEType);
 			_GPU.AddClock(20);
 			_Memory.SendClock(20);
+			_Timer.TimerInc(20);
 			//it seems that a INTR transfer procedure will spend 20clks
 			//and it will stop the timer for a while
 			//i dont quite understand.

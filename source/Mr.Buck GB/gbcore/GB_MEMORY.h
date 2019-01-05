@@ -2,7 +2,8 @@
 #include "GB.h"
 #include "GB_CART.h"
 #include "GB_SERIALIO.h"
-
+#include "GB_Timer.h"
+#include "GB_APU.h"
 /*
 Memory Manage Unit actually.
 Manage all W/R.
@@ -10,9 +11,10 @@ also have to control Carts and Serial IO parts.
 load rom
 also manage joypad.
 */
-class Memory {
+class Memory:public Hardware 
+{
 public:
-	Memory() noexcept {
+	Memory(){
 		Init(); 
 		Cart = NULL;
 		haveCart = 0; 
@@ -26,10 +28,25 @@ public:
 	GB_BY MemoryRead(GB_DB ad);
 	void MemoryWrite(GB_DB ad, GB_BY v);
 	
+	void ConnectTimer(Timer* Timer);
+	//void ConnectGPU(GPU* GPU);
+	void ConnectAPU(APU* APU);
+
 	void Init();
 	void LoadRom(const char* dir);
 	
-	void SendClock(GB_BY del);//only to timing Serial IO.
+	inline void SendClock(GB_BY delta) {
+		if (IOPort.State == 1) {
+			IOPort.addClock(delta);
+			if (IOPort.State == 0) {
+				_memoryMapio[0x0f] |= 0x08;
+				_memoryMapio[0x02] = 0;
+				_memoryMapio[0x01] = 0;
+			}
+		}
+		//_APU->SendClock(delta);
+	}//only to timing Serial IO.
+	void Send(GB_BY Interrupt);//for other device sending interrupt
 	
 	GB_BY _memoryMapio[0x80];
 	GB_BY _inbios;
@@ -60,6 +77,7 @@ public:
 		0x21, 0x04, 0x01, 0x11, 0xA8, 0x00, 0x1A, 0x13, 0xBE, 0x20, 0xFE, 0x23, 0x7D, 0xFE, 0x34, 0x20,
 		0xF5, 0x06, 0x19, 0x78, 0x86, 0x23, 0x05, 0x20, 0xFB, 0x86, 0x20, 0xFE, 0x3E, 0x01, 0xE0, 0x50,0xED
 	};
+
 private:
 	
 	GB_BY _memoryRomBank0[0x4000];
@@ -76,6 +94,10 @@ private:
 	GB_BY _KeyCol;
 
 	void UpdateTile(GB_DB ad);//pre-tranlate the tile data into images,making GPU work faster.
+
+	Timer *_Timer;
+	//GPU *_GPU;
+	APU *_APU;
 
 	int detectCartType(int &RomSize, int &RamSize, int &haveBettery, int &haveRam, int &haveMbc,int &CartType);
 };
