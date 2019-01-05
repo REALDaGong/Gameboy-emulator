@@ -38,7 +38,7 @@ private:
 	const GB_DB offset = 0xFF10;
 	GB_BY Reg[0x20];//base is 0xFF10,end at 0xFF2F useless now.
 	GB_BY LengthLoad[4];
-	GB_BY LengthCounter[4];
+	GB_DB LengthCounter[4];//Wave Length will reach 256
 	GB_BY Duty[2];
 
 	GB_BY VolSet[4];//for wave is 0-3,the others are 0-15
@@ -53,6 +53,7 @@ private:
 	GB_BY SweepPeriod;
 	GB_BY SweepTimer;
 	GB_BY Negate;
+	GB_BY Negated;//if Negate mode closed after calc,disable the channel.
 	GB_BY SweepShift;
 	GB_BY SweepEnable;
 	GB_DB Shadow;
@@ -71,7 +72,7 @@ private:
 	GB_BY DivPtr;
 
 	GB_BY DACEnable[4];
-	GB_BY PatternTable[0x10];
+	GB_BY PatternTable[0x20];//32x4bits.
 	GB_BY PtrHead;//0->High four,1->low four
 	std::vector<GB_BY> Sample;
 	struct Timer{

@@ -18,18 +18,35 @@ const GB_BY APU::WaveVol[4] = { 4,0,1,2 };
 void APU::APUWrite(GB_DB ad, GB_BY val) {
 	
 	if (ad < 0xFF30) {
-		if (Power == 0 && ad != NR52)return;
+		if (Power == 0) {
+			switch (ad) {//On DMG,the LengthCounter can still working while power off,but not clocked.
+			case NR52://go forward.
+				break;
+			case NR11:
+				LengthCounter[0] = 64 - (val & 0x3F);
+				return;
+			case NR21:
+				LengthCounter[1] = 64 - (val & 0x3F);
+				return;
+			case NR31:
+				LengthCounter[2] = 256 - val;
+				return;
+			case NR41:
+				LengthCounter[3] = 64 - (val & 0x3F);
+			default:
+				return;
+			}
+		}
 		switch (ad) {
 		case NR10:
 			//Reg[NR10 - 0xFF10] = val;
 			SweepPeriod = (val & 0x70) >> 4;
 			Negate = val & 0x8;
 			SweepShift = val & 0x7;
-			if (SweepShift == 0 || SweepPeriod == 0) {
+			if (Negated &&(Negate == 0)) {
+				Trigger[0] = 0;
 				SweepEnable = 0;
-			}
-			else {
-				SweepEnable = 1;//needed?
+				
 			}
 			break;
 		case NR11:
@@ -44,7 +61,10 @@ void APU::APUWrite(GB_DB ad, GB_BY val) {
 			VolEnvMode[0] = (val & 0x8) >> 3;
 			
 			VolEnvPeriod[0] = (val & 0x7);
-			if (VolSet[0] == 0 && VolEnvMode[0] == 0)DACEnable[0] = 0;
+			if (VolSet[0] == 0 && VolEnvMode[0] == 0) {
+				DACEnable[0] = 0;//disabled DAC should disable the channel immadiately.
+				Trigger[0] = 0;
+			}
 			else DACEnable[0] = 1;
 			break;
 		case NR13:
@@ -52,41 +72,65 @@ void APU::APUWrite(GB_DB ad, GB_BY val) {
 			Freq[0] = val|(Freq[0]&0x700);
 			break;
 		case NR14:
+			if ((val & 0x40) >> 6) {
+				Trigger[0] = 1;//enable length also enable channel.disable length cant disable channel.
+			}
+			if (LengthEnable[0] == 0 && (val & 0x40) >> 6 && (step&1)==0) {
+				if (LengthCounter[0] != 0) {
+					LengthCounter[0]--;
+					if (LengthCounter[0] == 0 && (val & 0x80) == 0) {
+						Trigger[0] = 0;
+						
+					}
+				}
+			}
 			//Reg[NR14 - 0xFF10] = val;
-			LengthEnable[0] = (val & 0x40) >> 6;
-			Trigger[0] = (val & 0x80) >> 7;
+			LengthEnable[0] = (val & 0x40) >> 6;//once be set,it will be used.
+			
 			Freq[0] = (Freq[0] & 0xFF) | ((val & 0x7) << 8);
 			if ((val & 0x80) >> 7) {
-				/*
-				Writing a value to NRx4 with bit 7 set causes the following things to occur:
 
-				Channel is enabled (see length counter).see ni horse ne.
-				If length counter is zero, it is set to 64 (256 for wave channel).
-				Frequency timer is reloaded with period.
-				Volume envelope timer is reloaded with period.
-				Channel volume is reloaded from NRx2.
-				Noise channel's LFSR bits are all set to 1.
-				Wave channel's position is set to 0 but sample buffer is NOT refilled.(And the sample 1 will be left in first cycle,that is, it always start from 
-				sample 2,sample 1 only be played in further cycles.)
-
-				Square 1's sweep does several things (see frequency sweep).
-				*/
-				//when does the LengthEnable flag come into action?instantly or after triggered?
-				if (LengthCounter[0] == 0)LengthCounter[0] = 64;
+				Trigger[0] = 1;
+				if (LengthCounter[0] == 0) {
+					if ((step & 1) == 0 && LengthEnable[0]) {
+						LengthCounter[0] = 63;
+					}
+					else {
+						LengthCounter[0] = 64;
+					}
+				}
 				_Timer[0].limit = (2048-(Freq[0]&0x7FF))<<2;
-				
+				_Timer[0].current = 0;//in fact,the last 2 bits are consistent.
 				EnvTimer[0] = VolEnvPeriod[0];
 				EnvStop[0] = 0;
 
 				VolOut[0] = VolSet[0];
-
+				Negated = 0;
 				Shadow = Freq[0];
-				SweepTimer = SweepPeriod;
-				SweepEnable = SweepShift != 0 && SweepPeriod != 0;
-
+				if (SweepPeriod != 0) {
+					SweepTimer = SweepPeriod;
+				}
+				else {
+					SweepTimer = 8;
+				}
+				if (SweepShift == 0 && SweepPeriod == 0) {
+					SweepEnable = 0;//wont stop Channel,just stop sweep.
+				}
+				else {
+					SweepEnable = 1;//needed?
+					if (SweepShift != 0) {
+						if (Negate) {
+							Negated = 1;
+							if (Shadow - (Shadow >> SweepShift) > 2047)Trigger[0] = 0;
+						}
+						else {
+							if (Shadow + (Shadow >> SweepShift) > 2047)Trigger[0] = 0;
+						}
+					}
+				}
 				Ptr[0] = 7;
-				if (SweepShift != 0 && Shadow + (Shadow >> SweepShift) > 2047)Trigger[0] = 0;
-				if (DACEnable[0] == 0)Trigger[0] = 0;
+				//once overflow,disable the channel.
+				if (DACEnable[0] == 0)Trigger[0] = 0;// disabled DAC allow data updated,but still disables the channel.
 			}
 			
 			break;
@@ -101,7 +145,10 @@ void APU::APUWrite(GB_DB ad, GB_BY val) {
 			VolSet[1] = val >> 4;
 			VolEnvMode[1] = (val & 0x8) >> 3;
 			VolEnvPeriod[1] = (val & 0x7);
-			if (VolSet[1] == 0 && VolEnvMode[1] == 0)DACEnable[1] = 0;
+			if (VolSet[1] == 0 && VolEnvMode[1] == 0) {
+				DACEnable[1] = 0;
+				Trigger[1] = 0;
+			}
 			else DACEnable[1] = 1;
 			break;
 		case NR23:
@@ -110,13 +157,33 @@ void APU::APUWrite(GB_DB ad, GB_BY val) {
 			break;
 		case NR24:
 			//Reg[NR24 - 0xFF10] = val;
+			if ((val & 0x40) >> 6) {
+				Trigger[1] = 1;
+			}
+			if (LengthEnable[1] == 0 && (val & 0x40) >> 6 && (step & 1) == 0) {
+				if (LengthCounter[1] != 0) {
+					LengthCounter[1]--;
+					if (LengthCounter[1] == 0 && (val & 0x80)==0) {
+						Trigger[1] = 0;
+					}
+				}
+			}
 			LengthEnable[1] = (val & 0x40) >> 6;
-			Trigger[1] = (val & 0x80) >> 7;
+			
 			Freq[1] = (Freq[1] & 0xFF) | ((val & 0x7) << 8);
+			
 			if ((val & 0x80) >> 7) {
-				if (LengthCounter[1] == 0)LengthCounter[1] = 64;
+				Trigger[1] = 1;
+				if (LengthCounter[1] == 0) {
+					if ((step & 1) == 0 && LengthEnable[1]) {
+						LengthCounter[1] = 63;
+					}
+					else {
+						LengthCounter[1] = 64;
+					}
+				}
 				_Timer[1].limit = (2048 - (Freq[1] & 0x7FF))<<2;
-
+				_Timer[1].current = 0;
 				EnvTimer[1] = VolEnvPeriod[1];
 				EnvStop[1] = 0;
 
@@ -128,8 +195,11 @@ void APU::APUWrite(GB_DB ad, GB_BY val) {
 			break;
 		case NR30:
 			//Reg[NR30 - 0xFF10] = val;
-			if (val & 0x80)DACEnable[2] = 1;
-			else DACEnable[2] = 0;
+			if (val & 0x80)DACEnable[2] = 1;//Wave channel DAC is not controlled by volume set.
+			else {
+				DACEnable[2] = 0;
+				Trigger[2] = 0;
+			}
 			break;
 		case NR31:
 			//Reg[NR31 - 0xFF10] = val;
@@ -145,14 +215,33 @@ void APU::APUWrite(GB_DB ad, GB_BY val) {
 			Freq[2] = val | (Freq[2] & 0x700);
 			break;
 		case NR34:
+			if ((val & 0x40) >> 6) {
+				Trigger[2] = 1;
+			}
+			if (LengthEnable[2] == 0 && (val & 0x40) >> 6 && (step & 1) == 0) {
+				if (LengthCounter[2] != 0) {
+					LengthCounter[2]--;
+					if (LengthCounter[2] == 0 && (val & 0x80) == 0) {
+						Trigger[2] = 0;
+					}
+				}
+			}
 			//Reg[NR34 - 0xFF10] = val;
 			LengthEnable[2] = (val & 0x40) >> 6;
-			Trigger[2] = (val & 0x80) >> 7;
 			Freq[2] = (Freq[2] & 0xFF) | ((val & 0x7) << 8);
+			
 			if ((val & 0x80) >> 7) {
-				if (LengthCounter[2] == 0)LengthCounter[2] = 64;
+				Trigger[2] = 1;
+				if (LengthCounter[2] == 0) {
+					if ((step & 1) == 0 && LengthEnable[2]) {
+						LengthCounter[2] = 255;
+					}
+					else {
+						LengthCounter[2] = 256;
+					}
+				}
 				_Timer[2].limit = (2048 - (Freq[2] & 0x7FF))<<1;
-
+				_Timer[2].current = 0;
 				VolOut[2] = VolSet[2];
 
 				Ptr[2] = PtrHead;
@@ -171,7 +260,10 @@ void APU::APUWrite(GB_DB ad, GB_BY val) {
 			VolSet[3] = val >> 4;
 			VolEnvMode[2] = (val & 0x8) >> 3;
 			VolEnvPeriod[2] = (val & 0x7);
-			if (VolSet[3] == 0 && VolEnvMode[2] == 0)DACEnable[3] = 0;
+			if (VolSet[3] == 0 && VolEnvMode[2] == 0) {
+				DACEnable[3] = 0;
+				Trigger[3] = 0;
+			}
 			else DACEnable[3] = 1;
 			break;
 		case NR43:
@@ -182,13 +274,32 @@ void APU::APUWrite(GB_DB ad, GB_BY val) {
 			Freq[3] = NoiseDiv[DivPtr] << (Shift >> 4);
 			break;
 		case NR44:
+			if ((val & 0x40) >> 6) {
+				Trigger[3] = 1;
+			}
+			if (LengthEnable[3] == 0 && (val & 0x40) >> 6 && (step & 1) == 0) {
+				if (LengthCounter[3] != 0) {
+					LengthCounter[3]--;
+					if (LengthCounter[3] == 0 && (val & 0x80) == 0) {
+						Trigger[3] = 0;
+					}
+				}
+			}
 			//Reg[NR44 - 0xFF10] = val;
 			LengthEnable[3] = (val & 0x40) >> 6;
-			Trigger[3] = (val & 0x80) >> 7;
+			
 			if ((val & 0x80) >> 7) {
-				if (LengthCounter[3] == 0)LengthCounter[3] = 64;
+				Trigger[3] = 1;
+				if (LengthCounter[3] == 0) {
+					if ((step & 1) == 0 && LengthEnable[3]) {
+						LengthCounter[3] = 63;
+					}
+					else {
+						LengthCounter[3] = 64;
+					}
+				}
 				_Timer[3].limit = 2048 - (Freq[1] & 0x7FF);
-
+				_Timer[3].current = 0;
 				EnvTimer[2] = VolEnvPeriod[2];
 				EnvStop[2] = 0;
 				LFSR = 0xFF;
@@ -230,17 +341,18 @@ void APU::APUWrite(GB_DB ad, GB_BY val) {
 		
 		
 		
-	}
+	}/*
 	else {
 		 PatternTable[ad - 0xFF30]=val;
-	}/*
+	}*/
 	else if (Trigger[2] == 0) {
 		if (ad == 0xFF30)PtrHead = Ptr[2];
-		GB_DB Loc = ad - 0xFF30 + PtrHead;
+		GB_DB Loc = ((ad - 0xFF30)<<1) + PtrHead;
 		if (Loc >= 32)Loc -= 32;
-		PatternTable[Loc>>1] = val;
+		PatternTable[Loc] = val>>4;
+		PatternTable[Loc + 1] = val&0xF;
 		
-	}*/
+	}
 }
 GB_BY APU::APURead(GB_DB ad) {
 	
@@ -321,19 +433,19 @@ GB_BY APU::APURead(GB_DB ad) {
 		default:
 			return 0xFF;
 		}
-	}
+	}/*
 	else {
 		return PatternTable[ad - 0xFF30];
-	}
-	/*
+	}*/
+	
 	else if (Trigger[2] == 0) {
-		GB_DB Loc = PtrHead + ad - 0xFF30;
+		GB_DB Loc = PtrHead + ((ad - 0xFF30)<<1);
 		if (Loc >= 32)Loc -= 32;
-		return PatternTable[Loc >> 1];
+		return (PatternTable[Loc]<<4)|PatternTable[Loc+1];
 	}
 	else
-		return PatternTable[Ptr[2]>>1];
-		*/
+		return (PatternTable[Ptr[2]]<<4)|PatternTable[Ptr[2]+1];
+		
 }
 void APU::Init() {
 	for (int i = 0; i < 4; i++) {
@@ -343,7 +455,7 @@ void APU::Init() {
 	}
 	//frame sequencer
 	
-	step = 7;
+	step = 0;//or 7?
 	Ptr[0] = Ptr[1] = 7;
 	Ptr[2] = Ptr[3] = 0;
 	_Timer[4].current = 0;
@@ -360,12 +472,16 @@ void APU::PowerON() {
 }
 void APU::PowerOFF() {
 	//all set to zero.
+	//for length counters:
+	// On CGB, length counters are reset when powered up.
+	// On DMG, they are unaffected, and not clocked.
 	for (int i = 0; i < 20; i++) {
 		Reg[i] = 0;
 	}
 	for (int i = 0; i < 4; i++) {
 		LengthLoad[i]=0;
-		LengthCounter[i]=0;
+		//for DMG,comment it.
+		//LengthCounter[i]=0;
 		Trigger[i]=0;
 		LengthEnable[i]=0;
 		VolSet[i]=0;
@@ -437,41 +553,58 @@ void APU::SendClock(GB_BY delta) {
 }
 void APU::Sequence() {
 	step++;
-	if (step == 8)step = 0;
+	if (step == 8) {
+		step = 0;
+	}
 	if (Power) {
-		if (step & 0) {
-
+		if ((step & 0x1)==0) {
+			if(Power)//DMG.
 			LengthCtr();
 		}
 		if (step == 7) {
 			VolEnv();
 		}
 		if (step == 2 || step == 6) {
+			if(SweepTimer!=0)
 			SweepTimer--;
 			if (SweepTimer == 0) {
-				if (SweepEnable)
+				if (SweepPeriod != 0) {
+					SweepTimer = SweepPeriod;
+				}
+				else {
+					SweepTimer = 8;//0 will be treated as 8,same as envlope timers.
+				}
+				if (SweepEnable &&SweepPeriod!=0)
 					Sweep();
 			}
 			
 		}
 	}
 }
-inline void APU::LengthCtr() {
+inline void APU::LengthCtr() {//disabled channel should still clock length.
+	
 	for (int i = 0; i < 4; i++) {
-		if (LengthEnable[i] &&Trigger[i]) {//Length decrease enabled
-			LengthCounter[i]--;
+		if (LengthEnable[i]) {
+			if (LengthCounter[i] != 0)
+				LengthCounter[i]--;
 			if (LengthCounter[i] == 0) {
 				Trigger[i] = 0;
 			}
 		}
 	}
+	
 }
 inline void APU::VolEnv() {
 	if (EnvStop[0] == 0 && VolEnvPeriod[0] != 0) {
 		EnvTimer[0]--;
 		
 		if (EnvTimer[0] == 0) {
-			EnvTimer[0] = VolEnvPeriod[0];
+			if (VolEnvPeriod[0] != 0) {
+				EnvTimer[0] = VolEnvPeriod[0];
+			}
+			else {
+				EnvTimer[0] = 8;
+			}
 			if (VolEnvMode[0] == 0) {
 				if (VolOut[0] != 0)
 					VolOut[0]--;
@@ -493,7 +626,12 @@ inline void APU::VolEnv() {
 		EnvTimer[1]--;
 		
 		if (EnvTimer[1] == 0) {
-			EnvTimer[1] = VolEnvPeriod[1];
+			if (VolEnvPeriod[1] != 0) {
+				EnvTimer[1] = VolEnvPeriod[1];
+			}
+			else {
+				EnvTimer[1] = 8;
+			}
 			if (VolEnvMode[1] == 0) {
 				if (VolOut[1] != 0)
 					VolOut[1]--;
@@ -514,7 +652,12 @@ inline void APU::VolEnv() {
 	if (EnvStop[2] == 0 && VolEnvPeriod[2] != 0) {
 		EnvTimer[2]--;
 		if (EnvTimer[2] == 0) {
-			EnvTimer[2] = VolEnvPeriod[2];
+			if (VolEnvPeriod[2] != 0) {
+				EnvTimer[2] = VolEnvPeriod[2];
+			}
+			else {
+				EnvTimer[2] = 8;
+			}
 			if (VolEnvMode[2] == 0) {
 				if (VolOut[3] != 0)
 					VolOut[3]--;
@@ -534,37 +677,49 @@ inline void APU::VolEnv() {
 	}
 }
 inline void APU::Sweep() {
-	SweepTimer--;
-	if (SweepTimer == 0) {
-		SweepTimer = SweepPeriod;
+	
 		
 		
-		if (Negate) {
-			GB_DB newFreq = Shadow - (Shadow >> SweepShift);
-			if(newFreq<2048)
+	if (Negate) {
+		GB_DB newFreq = Shadow - (Shadow >> SweepShift);
+		Negated = 1;
+		if (newFreq < 2048) {
+			if (SweepShift != 0) {
 				Freq[0] = newFreq;
-			else {
-				SweepEnable = 0;
-				Trigger[0] = 0;
+				Shadow = Freq[0];
+				if (Shadow - (Shadow >> SweepShift) > 2047) {
+					SweepEnable = 0;
+					Trigger[0] = 0;
+				}
 			}
-		}
-		else {
-			GB_DB newFreq = Shadow + (Shadow >> SweepShift);
-			if (newFreq<2048)
-				Freq[0] = newFreq;
-			else {
-				SweepEnable = 0;
-				Trigger[0] = 0;
-			}
-		}
-		Shadow = Freq[0];
-		if (Shadow + (Shadow >> SweepShift) > 2047) {
+		}else {
 			SweepEnable = 0;
-			Trigger[0] = 0;//?????????????????
+			Trigger[0] = 0;
+		}
+		
+	}
+	else {
+		GB_DB newFreq = Shadow + (Shadow >> SweepShift);
+		if (newFreq < 2048) {
+			if (SweepShift != 0) {
+				Freq[0] = newFreq;
+				Shadow = Freq[0];
+				if (Shadow + (Shadow >> SweepShift) > 2047) {
+					SweepEnable = 0;
+					Trigger[0] = 0;
+				}
+			}
+		}else {
+			SweepEnable = 0;
+			Trigger[0] = 0;
 		}
 		
 		
 	}
+	
+		
+		
+	
 }
 //its a little too bruce to even simulate the waves,a better way
 //is just sending commands directly to soundhardware,but its more
@@ -581,22 +736,24 @@ inline void APU::Square2() {
 }
 inline void APU::Wave() {
 	//yes,it is.
+	Output[2] = PatternTable[Ptr[2]] >> WaveVol[VolOut[2]];
 	Ptr[2]++;
 	if (Ptr[2] == 32)Ptr[2] = 0;
-	if ((Ptr[2] & 0) == 0)
-		Output[2] = (PatternTable[Ptr[2]>>1] & 0xF0) >> (WaveVol[VolOut[2]] + 4);
-	else
-		Output[2] = (PatternTable[Ptr[2]>>1] & 0xF) >> WaveVol[VolOut[2]];
 }
 inline void APU::Noise() {
-	GB_DB re = ((LFSR & 0x1) ^ ((LFSR >> 1) & 0x1));
-	if (WidthModeOn) {
-		LFSR >>= 1;
-		LFSR |= re << 6;
+	if (Shift > 13) {
+		Output[3] = ((LFSR & 0x1) == 1) ? 0 : VolOut[3];
 	}
 	else {
-		LFSR >>= 1;
-		LFSR |= re << 15;
+		GB_DB re = ((LFSR & 0x1) ^ ((LFSR >> 1) & 0x1));
+		if (WidthModeOn) {
+			LFSR >>= 1;
+			LFSR |= re << 6;
+		}
+		else {
+			LFSR >>= 1;
+			LFSR |= re << 15;
+		}
+		Output[3] = ((LFSR & 0x1) == 1) ? 0 : VolOut[3];
 	}
-	Output[3] = ((LFSR & 0x1) == 1) ? 0 : VolOut[3];
 }
