@@ -3,6 +3,7 @@
 #include "GB_CART.h"
 #include "GB_MEMORY.h"
 #include "GB_CPU.h"
+
 //for gui.
 //key event
 #define KY_A 0
@@ -22,9 +23,14 @@ typedef uint8_t KEYMOVE;
 
 namespace GBCore {
 	//should obey this order.
+	
+	
 	Memory memory;
-	Timer timer(memory);
+	Timer timer(&memory);
+	APU apu;
 	GPU gpu(memory);
+	
+	
 	Z80 cpu(memory, gpu, timer);
 }
 
@@ -36,6 +42,8 @@ int KeyEvent(KEYNAME keyname,KEYMOVE keymove);
 int LoadRom(std::string &dir);
 
 int GameBoyInit() {
+	GBCore::memory.ConnectTimer(&GBCore::timer);
+	GBCore::memory.ConnectAPU(&GBCore::apu);
 	GBCore::memory.Init();
 	GBCore::cpu.Init();
 	return 1;

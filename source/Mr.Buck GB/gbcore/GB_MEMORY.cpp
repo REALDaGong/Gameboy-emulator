@@ -38,7 +38,10 @@ void Memory::Init() {
 	memset(_memoryMapio, 0, sizeof(_memoryMapio));
 	memset(_memoryOam, 0, sizeof(_memoryOam));
 	memset(_memoryZeroRam, 0, sizeof(_memoryZeroRam));
-	
+	if(_Timer)
+		_Timer->Init();
+	if (_APU)
+		_APU->Init();
 	KeyReset();
 	_inbios = 1;
 }
@@ -130,7 +133,12 @@ GB_BY Memory::MemoryRead(GB_DB ad) {
 				if (ad == 0xFF01) {
 						return IOPort.ReadData();
 				}
-				
+				if (ad == TAC ||ad == TIMA ||ad==DIV||ad==TMA) {
+					return _Timer->TimerRead(ad);
+				}
+				if (ad >= NR10 && ad <= 0xFF3F) {
+					return _APU->APURead(ad);
+				}
 				return _memoryMapio[ad & 0xFF];
 			}
 			else
@@ -221,7 +229,7 @@ void Memory::MemoryWrite(GB_DB ad, GB_BY val) {
 		else {
 			//Zero,IO
 			if (ad<0xFF80&&ad>=0xFF00) {
-				if (ad == DIV){_memoryMapio[ad & 0xFF] = 0; break;}
+				if (ad == DIV || ad==TAC || ad==TIMA){_Timer->TimerWrite(ad,val); break;}//although TMA is also a timer reg,but it has no special behaviours
 				if (ad==LY){ _memoryMapio[ad & 0xFF] = 0; break; }
 				if (ad == 0xFF4D) {
 					_memoryMapio[ad & 0xFF] = val == 1 ? 0x7F : 0x7E;
@@ -274,6 +282,9 @@ void Memory::MemoryWrite(GB_DB ad, GB_BY val) {
 						}
 					
 				}
+				if (ad >= NR10 && ad <= 0xFF3F) {
+					_APU->APUWrite(ad, val);
+				}
 				_memoryMapio[ad&0xFF] = val;
 			}
 			else if(ad>=0xFF80)
@@ -286,6 +297,15 @@ void Memory::MemoryWrite(GB_DB ad, GB_BY val) {
 		}
 	}
 	return;
+}
+void Memory::ConnectTimer(Timer* timer) {
+	_Timer =timer;
+}
+void Memory::ConnectAPU(APU* apu) {
+	_APU = apu;
+}
+void Memory::Send(GB_BY interrupt) {
+	_memoryMapio[0xFF & IF] |= interrupt;
 }
 //joypad part
 inline void Memory::KeyReset() {
@@ -435,14 +455,4 @@ int Memory::detectCartType(int &RomSize, int &RamSize, int &haveBettery, int &ha
 		//not surpported
 	}
 	return CartType;
-}
-void Memory::SendClock(GB_BY delta) {
-	if (IOPort.State==1) {
-		IOPort.addClock(delta);
-		if (IOPort.State == 0) {
-			_memoryMapio[0x0f] |= 0x08;
-			_memoryMapio[0x02] = 0;
-			_memoryMapio[0x01] = 0;
-		}
-	}
 }
