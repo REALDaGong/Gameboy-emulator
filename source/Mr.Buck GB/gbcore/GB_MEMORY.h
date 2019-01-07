@@ -44,8 +44,8 @@ public:
 				_memoryMapio[0x01] = 0;
 			}
 		}
-		//_APU->SendClock(delta);
-	}//only to timing Serial IO.
+		_APU->SendClock(delta);
+	}//timing Serial IO and APU.
 	void Send(GB_BY Interrupt);//for other device sending interrupt
 	
 	GB_BY _memoryMapio[0x80];

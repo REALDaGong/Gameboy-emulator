@@ -70,6 +70,12 @@ private:
 	inline GB_BY GetFlag(int cname) {
 		if (_REG.F&static_cast<GB_BY>(1) << cname)return (GB_BY)1; return (GB_BY)0;
 	}
+
+	inline void SendClock(GB_BY delta) {//for accurate timing.
+		_Timer.TimerInc(delta);
+		_GPU.AddClock(delta);
+		_Memory.SendClock(delta);
+	}
 	bool isPause,isStop;     //for HALT,STOP Ops
 
 	void LDHL();

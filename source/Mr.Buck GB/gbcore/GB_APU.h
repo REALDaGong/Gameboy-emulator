@@ -72,12 +72,24 @@ private:
 	GB_BY DivPtr;
 
 	GB_BY DACEnable[4];
-	GB_BY PatternTable[0x20];//32x4bits.
+	GB_BY PatternTable[0x10];//32samples X 4bits.
+	GB_BY justTriggered;
+	GB_BY SampleBuffer;//only low 4 bits are used.
 	GB_BY PtrHead;//0->High four,1->low four
 	std::vector<GB_BY> Sample;
 	struct Timer{
 		GB_DB limit;
 		GB_DB current;
+		GB_DB oldLimit;
+		//reason for oldLimit:
+		//the freq maybe changed while no reloading for the timer,it doesn't matter for the
+		//real GB.Because its timer are decremented,change the freq only affect the
+		//next period length,but these timer are increasing,if you set the freq smaller,
+		//the counter may go beyond the limit,and something strange will occur.The reason 
+		//in depth is that i didn't count the cpu clock one by one,instead,i count them
+		//in OPs,then it's a little awkward when you decreasing them below zero,so i choose
+		//increasing counting.
+		//once the timer overflow or reloaded in triggering,oldLimit <-- limit.
 	};
 	Timer _Timer[5];
 

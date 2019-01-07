@@ -70,6 +70,7 @@ void APU::APUWrite(GB_DB ad, GB_BY val) {
 		case NR13:
 			//Reg[NR13 - 0xFF10] = val;
 			Freq[0] = val|(Freq[0]&0x700);
+			_Timer[0].limit = (2048 - (Freq[0] & 0x7FF)) << 2;
 			break;
 		case NR14:
 			if ((val & 0x40) >> 6) {
@@ -100,6 +101,7 @@ void APU::APUWrite(GB_DB ad, GB_BY val) {
 					}
 				}
 				_Timer[0].limit = (2048-(Freq[0]&0x7FF))<<2;
+				_Timer[0].oldLimit = _Timer[0].limit;
 				_Timer[0].current = 0;//in fact,the last 2 bits are consistent.
 				EnvTimer[0] = VolEnvPeriod[0];
 				EnvStop[0] = 0;
@@ -154,6 +156,8 @@ void APU::APUWrite(GB_DB ad, GB_BY val) {
 		case NR23:
 			//Reg[NR23 - 0xFF10] = val;
 			Freq[1] = val | (Freq[1] & 0x700);
+			_Timer[1].limit = (2048 - (Freq[1] & 0x7FF)) << 2;//seems that the Timer can be modified while running,but i dont know whether it would
+															  //be reloaded at the same time.
 			break;
 		case NR24:
 			//Reg[NR24 - 0xFF10] = val;
@@ -171,7 +175,6 @@ void APU::APUWrite(GB_DB ad, GB_BY val) {
 			LengthEnable[1] = (val & 0x40) >> 6;
 			
 			Freq[1] = (Freq[1] & 0xFF) | ((val & 0x7) << 8);
-			
 			if ((val & 0x80) >> 7) {
 				Trigger[1] = 1;
 				if (LengthCounter[1] == 0) {
@@ -183,6 +186,7 @@ void APU::APUWrite(GB_DB ad, GB_BY val) {
 					}
 				}
 				_Timer[1].limit = (2048 - (Freq[1] & 0x7FF))<<2;
+				_Timer[1].oldLimit = _Timer[1].limit;
 				_Timer[1].current = 0;
 				EnvTimer[1] = VolEnvPeriod[1];
 				EnvStop[1] = 0;
@@ -213,6 +217,8 @@ void APU::APUWrite(GB_DB ad, GB_BY val) {
 		case NR33:
 			//Reg[NR33 - 0xFF10] = val;
 			Freq[2] = val | (Freq[2] & 0x700);
+			_Timer[2].limit = (2048 - (Freq[2] & 0x7FF)) << 1;
+
 			break;
 		case NR34:
 			if ((val & 0x40) >> 6) {
@@ -229,9 +235,9 @@ void APU::APUWrite(GB_DB ad, GB_BY val) {
 			//Reg[NR34 - 0xFF10] = val;
 			LengthEnable[2] = (val & 0x40) >> 6;
 			Freq[2] = (Freq[2] & 0xFF) | ((val & 0x7) << 8);
-			
 			if ((val & 0x80) >> 7) {
 				Trigger[2] = 1;
+				justTriggered = 1;
 				if (LengthCounter[2] == 0) {
 					if ((step & 1) == 0 && LengthEnable[2]) {
 						LengthCounter[2] = 255;
@@ -241,11 +247,12 @@ void APU::APUWrite(GB_DB ad, GB_BY val) {
 					}
 				}
 				_Timer[2].limit = (2048 - (Freq[2] & 0x7FF))<<1;
+				
+				_Timer[2].oldLimit = _Timer[2].limit;//?
 				_Timer[2].current = 0;
 				VolOut[2] = VolSet[2];
 
-				Ptr[2] = PtrHead;
-				Sample.empty();//?
+				Ptr[2] = 0;
 				if (DACEnable[2] == 0)Trigger[2] = 0;
 			}
 			
@@ -272,6 +279,7 @@ void APU::APUWrite(GB_DB ad, GB_BY val) {
 			WidthMode = val & 0x8;
 			Shift = val & 0xF0;
 			Freq[3] = NoiseDiv[DivPtr] << (Shift >> 4);
+			_Timer[3].limit = 2048 - (Freq[3] & 0x7FF);//?
 			break;
 		case NR44:
 			if ((val & 0x40) >> 6) {
@@ -298,7 +306,8 @@ void APU::APUWrite(GB_DB ad, GB_BY val) {
 						LengthCounter[3] = 64;
 					}
 				}
-				_Timer[3].limit = 2048 - (Freq[1] & 0x7FF);
+				_Timer[3].limit = 2048 - (Freq[3] & 0x7FF);
+				_Timer[3].oldLimit = _Timer[3].limit;
 				_Timer[3].current = 0;
 				EnvTimer[2] = VolEnvPeriod[2];
 				EnvStop[2] = 0;
@@ -341,17 +350,16 @@ void APU::APUWrite(GB_DB ad, GB_BY val) {
 		
 		
 		
-	}/*
+	}
 	else {
-		 PatternTable[ad - 0xFF30]=val;
-	}*/
-	else if (Trigger[2] == 0) {
-		if (ad == 0xFF30)PtrHead = Ptr[2];
-		GB_DB Loc = ((ad - 0xFF30)<<1) + PtrHead;
-		if (Loc >= 32)Loc -= 32;
-		PatternTable[Loc] = val>>4;
-		PatternTable[Loc + 1] = val&0xF;
-		
+		if (Trigger[2] == 0) {
+
+			PatternTable[ad - 0xFF30] = val;
+
+		}
+		else {
+			PatternTable[Ptr[2] >> 1] = val;
+		}
 	}
 }
 GB_BY APU::APURead(GB_DB ad) {
@@ -433,26 +441,31 @@ GB_BY APU::APURead(GB_DB ad) {
 		default:
 			return 0xFF;
 		}
-	}/*
-	else {
-		return PatternTable[ad - 0xFF30];
-	}*/
-	
-	else if (Trigger[2] == 0) {
-		GB_DB Loc = PtrHead + ((ad - 0xFF30)<<1);
-		if (Loc >= 32)Loc -= 32;
-		return (PatternTable[Loc]<<4)|PatternTable[Loc+1];
 	}
-	else
-		return (PatternTable[Ptr[2]]<<4)|PatternTable[Ptr[2]+1];
+	
+	else {
+		if (Trigger[2] == 0) {
+
+			return PatternTable[ad - 0xFF30];
+		}
+		else
+			return PatternTable[Ptr[2] >> 1];
+	}
 		
 }
 void APU::Init() {
-	for (int i = 0; i < 4; i++) {
-		_Timer[i].limit = SYS / 2048;
+	for (int i = 0; i < 2; i++) {
+		_Timer[i].oldLimit=_Timer[i].limit = 2048<<2;
 		_Timer[i].current = 0;
 		DACEnable[i] = 0;
 	}
+	_Timer[2].oldLimit = _Timer[2].limit = 4;
+	_Timer[2].current =0;
+	DACEnable[2] = 0;
+
+	_Timer[3].oldLimit = _Timer[3].limit = 8;
+	_Timer[3].current = 0;
+	DACEnable[3] = 0;
 	//frame sequencer
 	
 	step = 0;//or 7?
@@ -460,14 +473,26 @@ void APU::Init() {
 	Ptr[2] = Ptr[3] = 0;
 	_Timer[4].current = 0;
 	_Timer[4].limit = SYS / 512;
-	Power = 0x80;
+	Power = 0;
 }
 void APU::PowerON() {
+	for (int i = 0; i < 2; i++) {
+		_Timer[i].oldLimit=_Timer[i].limit = 2048 << 2;
+		_Timer[i].current = 0;
+		
+	}
+	_Timer[2].oldLimit=_Timer[2].limit = 4;
+	_Timer[2].current = 0;
+	
+
+	_Timer[3].oldLimit=_Timer[3].limit = 8;
+	_Timer[3].current = 0;
+	
 	Ptr[0] = Ptr[1] = 7;
 	Ptr[2] = Ptr[3] = 0;
 	step = 7;
-	for (int i = 0; i < 16; i++) {
-		PatternTable[i] = 0;
+	for (int i = 0; i < 4; i++) {
+		_Timer[i].current = _Timer[i].oldLimit;
 	}
 }
 void APU::PowerOFF() {
@@ -507,41 +532,49 @@ void APU::PowerOFF() {
 	
 	WidthMode=0;
 	WidthModeOn=0;//?
-	LFSR=0;
+	LFSR=0xFF;
 	Shift=0;
 	DivPtr=0;
 	Lopen=Ropen=0;
 	LVin=RVin=0;
 	outputL=0;
 	outputR=0;
-	PtrHead=0;
+	SampleBuffer=0;
 }
 void APU::SendClock(GB_BY delta) {
 	if (DACEnable[0] == 1) {//well,i think it doesn't matter,but it will save some cpu cycles...
 		_Timer[0].current += delta;
-		if (_Timer[0].current >= _Timer[0].limit) {
-			_Timer[0].current -= _Timer[0].limit;
+		while (_Timer[0].current >= _Timer[0].oldLimit) {
+			_Timer[0].current -= _Timer[0].oldLimit;
+			_Timer[0].oldLimit = _Timer[0].limit;
+			
 			Square1();
 		}
 	}
 	if (DACEnable[1] == 1) {
 		_Timer[1].current += delta;
-		if (_Timer[1].current >= _Timer[1].limit) {
-			_Timer[1].current -= _Timer[1].limit;
+		while (_Timer[1].current >= _Timer[1].oldLimit) {
+			_Timer[1].current -= _Timer[1].oldLimit;
+			_Timer[1].oldLimit = _Timer[1].limit;
+			
 			Square2();
 		}
 	}
-	if (DACEnable[2] == 1) {
+	if (DACEnable[2]) {//must always counting when powered?
 		_Timer[2].current += delta;
-		if (_Timer[2].current >= _Timer[2].limit) {
-			_Timer[2].current -= _Timer[2].limit;
+		while (_Timer[2].current >= _Timer[2].oldLimit) {
+			_Timer[2].current -= _Timer[2].oldLimit;
+			_Timer[2].oldLimit = _Timer[2].limit;
+			
 			Wave();
 		}
 	}
 	if (DACEnable[3] == 1) {
 		_Timer[3].current += delta;
-		if (_Timer[3].current >= _Timer[3].limit) {
-			_Timer[3].current -= _Timer[3].limit;
+		while (_Timer[3].current >= _Timer[3].oldLimit) {
+			_Timer[3].current -= _Timer[3].oldLimit;
+			_Timer[3].oldLimit = _Timer[3].limit;
+			
 			Noise();
 		}
 	}
@@ -562,6 +595,7 @@ void APU::Sequence() {
 			LengthCtr();
 		}
 		if (step == 7) {
+			if(Power)
 			VolEnv();
 		}
 		if (step == 2 || step == 6) {
@@ -687,9 +721,13 @@ inline void APU::Sweep() {
 			if (SweepShift != 0) {
 				Freq[0] = newFreq;
 				Shadow = Freq[0];
+				
 				if (Shadow - (Shadow >> SweepShift) > 2047) {
 					SweepEnable = 0;
 					Trigger[0] = 0;
+				}
+				else {
+					_Timer[0].limit = (2048 - (Freq[0]&0x7FF)) << 2;
 				}
 			}
 		}else {
@@ -707,6 +745,9 @@ inline void APU::Sweep() {
 				if (Shadow + (Shadow >> SweepShift) > 2047) {
 					SweepEnable = 0;
 					Trigger[0] = 0;
+				}
+				else {
+					_Timer[0].limit = (2048 - (Freq[0]&0x7FF)) << 2;
 				}
 			}
 		}else {
@@ -734,9 +775,37 @@ inline void APU::Square2() {
 	if (Ptr[1] == 8)Ptr[1] = 0;
 	Output[1] = WaveTable[Duty[1]][Ptr[1]]*VolOut[1];
 }
+/*
 inline void APU::Wave() {
 	//yes,it is.
-	Output[2] = PatternTable[Ptr[2]] >> WaveVol[VolOut[2]];
+	
+	Ptr[2]++;
+	if (Ptr[2] == 32)Ptr[2] = 0;
+	if ((Ptr[2] % 2)==1) {
+		SampleBuffer = PatternTable[Ptr[2]>>1]&0xF;
+	}
+	else {
+		SampleBuffer = PatternTable[Ptr[2]>>1]>>4;
+	}
+	Output[2] = SampleBuffer >> WaveVol[VolOut[2]];
+}*/
+inline void APU::Wave() {
+	//yes,it is.
+	if (justTriggered) {
+		Output[2] = ((SampleBuffer >> 4) & 0xF)>> WaveVol[VolOut[2]];
+		justTriggered = 0;
+	}
+	else {
+		GB_BY Loc = Ptr[2] >> 1;
+		SampleBuffer = PatternTable[Loc];
+		if (Loc & 1) {
+			Output[2] = SampleBuffer & 0xF;
+		}
+		else {
+			Output[2] = SampleBuffer >> 4;
+		}
+		Output[2] >>= WaveVol[VolOut[2]];
+	}
 	Ptr[2]++;
 	if (Ptr[2] == 32)Ptr[2] = 0;
 }

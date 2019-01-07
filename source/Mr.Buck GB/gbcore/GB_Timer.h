@@ -1,7 +1,6 @@
 #pragma once
 #include "GB.h"
-//#include "GB_MEMORY.h"
-//#include "GB_InterHandler.h"
+
 class Timer:public Hardware
 {
 public:
@@ -42,14 +41,15 @@ public:
 	void TimerWrite(GB_DB ad, GB_BY val) {
 		switch (ad) {
 		case DIV:
-			//if (rDIV & (TACtable[CurrentTACselect] >> 1)) {
+			if (rDIV & (TACtable[CurrentTACselect] >> 1)) {
 			//obscure1:
 			//change DIV when multiplexer selected bit is 1 will make the output become zero,causing 
 			//a fall edge and the TIMA will increase.
-			//rTIMA++;
-			//}
+			rTIMA++;
+			}
 
 			rDIV = 0;
+			Sub = 0;//see the picture in .cpp,Sub is just the low bits of the timer,DIV is the high 8 bits.
 			break;
 		case TIMA:
 			rTIMA = val;
@@ -60,21 +60,24 @@ public:
 			//same as 1,if you produce a falling edge for Timer,TIMA will increased.
 			rTAC = val;
 
-			//GB_BY oldSelect = rTAC & 0x3;
+			GB_BY oldSelect = rTAC & 0x3;
 			CurrentTACselect = val & 0x3;
 
-			//GB_BY oldEnable = val & 0x4;
+			GB_BY oldEnable = val & 0x4;
 			TimerEnable = val & 0x4;
 			Sub &= (TACtable[CurrentTACselect] - 1);
 
-			//if ((rDIV&TACtable[oldSelect] > 0) && (rDIV&TACtable[CurrentTACselect] == 0)) {
-			//	rTIMA++;
-			//	return;
-			//}
-			//if(r)
+			if ((rDIV&(TACtable[oldSelect]>>1)) && ((rDIV&(TACtable[CurrentTACselect]>>1)) == 0)) {
+				rTIMA++;
+				return;
+			}
+			if ((rDIV&(TACtable[oldSelect]>>1)) && oldEnable == 1 && TimerEnable == 0) {
+				rTIMA++;
+				return;
+			}
 			//
 			//
-			//no! something wrong! i change all timer after the ops are excuted,but when does the glitch happen?
+			//no! something wrong! i change all timer after the ops are excuted,but when does the glitch happen?????
 		}
 		break;
 		case TMA:

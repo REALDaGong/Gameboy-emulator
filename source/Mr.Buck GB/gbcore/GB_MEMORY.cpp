@@ -229,7 +229,7 @@ void Memory::MemoryWrite(GB_DB ad, GB_BY val) {
 		else {
 			//Zero,IO
 			if (ad<0xFF80&&ad>=0xFF00) {
-				if (ad == DIV || ad==TAC || ad==TIMA){_Timer->TimerWrite(ad,val); break;}//although TMA is also a timer reg,but it has no special behaviours
+				if (ad == DIV || ad==TAC || ad==TIMA||ad==TMA){_Timer->TimerWrite(ad,val); break;}
 				if (ad==LY){ _memoryMapio[ad & 0xFF] = 0; break; }
 				if (ad == 0xFF4D) {
 					_memoryMapio[ad & 0xFF] = val == 1 ? 0x7F : 0x7E;

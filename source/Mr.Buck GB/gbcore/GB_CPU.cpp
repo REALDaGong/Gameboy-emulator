@@ -18,7 +18,7 @@ static array<function<int()>, 0x100 * sizeof(int)> CBOpCode;
 void Z80::Step() {
 #ifdef LOG
 	static int breakpoint = 0;
-	if (breakpoint==0&&_REG.PC > 0x100) {
+	if (breakpoint==0&&_REG.PC > 0xFA) {
 		if (freopen("E:\\out.log", "w", stdout)) {
 			breakpoint = 1;
 		}
@@ -36,19 +36,17 @@ void Z80::Step() {
 			cout << "HL:" << hex << setw(4) << ((((GB_DB)_REG.H) << 8) | (_REG.L)) << endl;
 			cout << "SP:" << hex << setw(4) << _REG.SP << endl;
 			cout << "PC:" << hex << setw(4) << _REG.PC << endl;
+			cout << "TIM:" << hex << setw(2) << (GB_DB)_Memory.MemoryRead(0xFF04) << endl;
 			cout << "--------------------------------------------------------------------------------------------------------" << endl;
 		}
 #endif
 		Op = _Memory.MemoryRead(_REG.PC++);
-		delta = OpCode[Op]();
-		_Timer.TimerInc(delta);
-		_GPU.AddClock(delta);
-		_Memory.SendClock(delta);
+		delta = OpCode[Op]();//it can't make exactly timing.take 0xFO for an example,when write/read the memory,delta should be 8(prepare)+4(accessing mem),not just 12.
+							 //And when modifying,CPU reads at next-to-last cycle,and write at the last one. 
+		SendClock(delta);
 	}
 	else {
-		_Timer.TimerInc(4);
-		_GPU.AddClock(4);
-		_Memory.SendClock(4);
+		SendClock(4);
 	}
 
 	if (_Memory.MemoryRead(IE)&_Memory.MemoryRead(IF)) {
@@ -56,9 +54,7 @@ void Z80::Step() {
 		if (_REG.IME) {
 			GB_BY IMEType = _Memory.MemoryRead(IE) & _Memory.MemoryRead(IF);
 			Interrupt(IMEType);
-			_GPU.AddClock(20);
-			_Memory.SendClock(20);
-			_Timer.TimerInc(20);
+			SendClock(20);
 			//it seems that a INTR transfer procedure will spend 20clks
 			//and it will stop the timer for a while
 			//i dont quite understand.
@@ -102,7 +98,7 @@ void Z80::Interrupt(GB_BY IMEtype) {
 					}//transition from high to low of pin number p10-p13
 	
 }
-void Z80::InitOpCodeList() {
+void Z80::InitOpCodeList() {//omg,what a mess!!! 2019/1/7
 	for (int i = 0; i < 0x100; i++) {
 		OpCode[i] = [&]()->int {return 0; };
 		CBOpCode[i] = [&]()->int {return 0; };
@@ -219,7 +215,7 @@ void Z80::InitOpCodeList() {
 	//LDH (n),A
 	//p75
 	OpCode[0xE0] = [&]()->int {_Memory.MemoryWrite(0xFF00 + _Memory.MemoryRead(_REG.PC++), _REG.A); return 12; };
-	OpCode[0xF0] = [&]()->int {_REG.A = _Memory.MemoryRead(0xFF00 + _Memory.MemoryRead(_REG.PC++)); return 12; };
+	OpCode[0xF0] = [&]()->int { _REG.A = _Memory.MemoryRead(0xFF00 + _Memory.MemoryRead(_REG.PC++)); return 12; };
 
 	//LD n,nn
 	//p76
