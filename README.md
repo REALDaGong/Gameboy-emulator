@@ -1,7 +1,5 @@
 # GameBoy-Emulator
 
-发个宏愿，寒假搞定音频(至少部分音频，sunsoft之类的扩展先不考虑)
+GPU need more accuate emulation to implement real graphics.
 
-试试彩色，是时候进化成GBC了？
-
-代码仍有许多需要调整的地方，看看能不能发现timer差时间的真正原因，最坏的结果是需要重写cpu部分....
+NO!!!!!!!!!!!!!!!!!!!!!!!
