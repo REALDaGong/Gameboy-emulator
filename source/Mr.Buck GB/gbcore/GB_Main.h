@@ -3,7 +3,6 @@
 #include "GB_CART.h"
 #include "GB_MEMORY.h"
 #include "GB_CPU.h"
-
 //for gui.
 //key event
 #define KY_A 0
@@ -28,10 +27,11 @@ namespace GBCore {
 	Memory memory;
 	Timer timer(&memory);
 	APU apu;
-	GPU gpu(memory);
+	GPU gpu(&memory);
 	
 	
-	Z80 cpu(memory, gpu, timer);
+	//Z80 cpu(memory, gpu, timer);
+	CPU cpu(memory);
 }
 
 const GB_BY(*const GameBoyScreen)[SCREEN_MAX_Y] = GBCore::gpu._Screen;
@@ -44,17 +44,31 @@ int LoadRom(std::string &dir);
 int GameBoyInit() {
 	GBCore::memory.ConnectTimer(&GBCore::timer);
 	GBCore::memory.ConnectAPU(&GBCore::apu);
+	GBCore::memory.ConnectGPU(&GBCore::gpu);
 	GBCore::memory.Init();
 	GBCore::cpu.Init();
 	return 1;
 }
-
+/*
 void RunANewFrame() {
 	while (!GBCore::gpu.GetNewFrameFlag()) {
 		GBCore::cpu.Step();
 	}
-	GBCore::gpu.SetNewFrameFlag(0);
+	GBCore::gpu.ResetNewFrameFlag();
+}*/
+void RunANewFrame() {
+	for (int i = 0; i < 70224; i++) {
+		
+		
+		
+		GBCore::cpu.tick();
+		GBCore::timer.TimerInc(1);
+		GBCore::memory.SendClock(1);
+		GBCore::gpu.AddClock(1);
+	}
+	
 }
+
 //return 0 if failed.
 int KeyEvent(KEYNAME keyname, KEYMOVE keymove) {
 	using namespace GBCore;

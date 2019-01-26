@@ -33,15 +33,18 @@ void Memory::LoadRom(const char* dir) {
 	
 }
 void Memory::Init() {
-	memset(_memoryGraphicsRam, 0, sizeof(_memoryGraphicsRam));
 	memset(_memoryWorkingRam, 0, sizeof(_memoryWorkingRam));
 	memset(_memoryMapio, 0, sizeof(_memoryMapio));
-	memset(_memoryOam, 0, sizeof(_memoryOam));
 	memset(_memoryZeroRam, 0, sizeof(_memoryZeroRam));
+	DMAEnable = 0;
+	DMAReady = 0;
+	DMAptr = 0;
 	if(_Timer)
 		_Timer->Init();
 	if (_APU)
 		_APU->Init();
+	if(_GPU)
+		_GPU->Init();
 	KeyReset();
 	_inbios = 1;
 }
@@ -54,8 +57,9 @@ GB_BY Memory::MemoryRead(GB_DB ad) {
 		//bios
 	case 0x0000:
 		if (_inbios) {
-			if (ad < 0x101)return _memory_bios[ad];
-			
+			if (ad == 0x100)_inbios = 0;
+			if (ad < 0x100)return _memory_bios[ad];
+			else return _memoryRomBank0[ad];
 		}
 		else {
 			return _memoryRomBank0[ad];
@@ -75,7 +79,7 @@ GB_BY Memory::MemoryRead(GB_DB ad) {
 		//VRAM
 	case 0x8000:
 	case 0x9000:
-		return _memoryGraphicsRam[ad & 0x1FFF];
+		return _GPU->GPURead(ad);
 		break;
 		//Ex RAM
 	case 0xA000:
@@ -123,7 +127,7 @@ GB_BY Memory::MemoryRead(GB_DB ad) {
 		if ((ad & 0xFFF)<0xE00)
 			return _memoryWorkingRam[ad & 0x1FFF];
 		else if ((ad & 0xFFF) < 0xEA0) {//OAM
-			return _memoryOam[ad & 0xFF];
+			return _GPU->GPURead(ad);
 		}
 		else {
 			//Zero,IO
@@ -133,13 +137,22 @@ GB_BY Memory::MemoryRead(GB_DB ad) {
 				if (ad == 0xFF01) {
 						return IOPort.ReadData();
 				}
+				if (ad == IF) {
+					return 0xE0 | _memoryMapio[ad & 0xFF];
+				}
+				if (ad == IE) {
+					return _memoryMapio[ad & 0xFF]&0x1F;
+				}
 				if (ad == TAC ||ad == TIMA ||ad==DIV||ad==TMA) {
 					return _Timer->TimerRead(ad);
 				}
 				if (ad >= NR10 && ad <= 0xFF3F) {
 					return _APU->APURead(ad);
 				}
-				return _memoryMapio[ad & 0xFF];
+				if (ad >= LCDC && ad <= WX) {
+					return _GPU->GPURead(ad);
+				}
+				return 0xFF;//invaild IO ports
 			}
 			else
 			{
@@ -151,6 +164,7 @@ GB_BY Memory::MemoryRead(GB_DB ad) {
 }
 
 void Memory::MemoryWrite(GB_DB ad, GB_BY val) {
+	//if (DMAReady) { DMAEnable = 1; DMAReady = 0; _GPU->GPUWrite(DMA, 1);}
 	switch (ad&0xF000) {
 	//bios
 	case 0x0000:
@@ -177,10 +191,7 @@ void Memory::MemoryWrite(GB_DB ad, GB_BY val) {
 	//VRAM
 	case 0x8000:
 	case 0x9000:
-		_memoryGraphicsRam[ad & 0x1FFF] = val;
-		if (ad <= 0x97FF) {
-			UpdateTile(ad);
-		}
+		_GPU->GPUWrite(ad, val);
 		break;
 	//Ex RAM
 	case 0xA000:
@@ -224,41 +235,24 @@ void Memory::MemoryWrite(GB_DB ad, GB_BY val) {
 		if((ad&0xFFF)<0xE00)
 		_memoryWorkingRam[ad & 0x1FFF] = val;
 		else if ((ad & 0xFFF) < 0xEA0) {//OAM
-			_memoryOam[ad & 0xFF] = val;
+			_GPU->GPUWrite(ad, val);
 		}
 		else {
 			//Zero,IO
 			if (ad<0xFF80&&ad>=0xFF00) {
 				if (ad == DIV || ad==TAC || ad==TIMA||ad==TMA){_Timer->TimerWrite(ad,val); break;}
-				if (ad==LY){ _memoryMapio[ad & 0xFF] = 0; break; }
+
 				if (ad == 0xFF4D) {
-					_memoryMapio[ad & 0xFF] = val == 1 ? 0x7F : 0x7E;
+					_memoryMapio[ad & 0xFF] = val == 1 ? 0x7F : 0x7E;//speed switch, work on cgb.
 				}
 				if (ad == DMA){
+					_memoryMapio[ad & 0xFF] = val;
+					
+					//DMAReady = 1;
 					for (int i = 0; i < 0xA0; i++) {
 						MemoryWrite(0xFE00+i, MemoryRead((val<<8) + i));
 					}
-					break;
-				}
-				if (ad == STAT) {
-					if ((val & 0x7) != 0) {
-						val &= ~0x7;
-					}
-					if (val & 0x80) {
-						_memoryMapio[ad & 0xFF] = (_memoryMapio[ad & 0xFF] & 0x7) + val;
-					}
-					else if (val & 0x40) {
-						_memoryMapio[ad & 0xFF] = (_memoryMapio[ad & 0xFF] & 0x87) + val;
-					}
-					else if (val & 0x20) {
-						_memoryMapio[ad & 0xFF] = (_memoryMapio[ad & 0xFF] & 0xC7) + val;
-					}
-					else if (val & 0x10) {
-						_memoryMapio[ad & 0xFF] = (_memoryMapio[ad & 0xFF] & 0xA7) + val;
-					}
-					else if (val & 0x8) {
-						_memoryMapio[ad & 0xFF] = (_memoryMapio[ad & 0xFF] & 0xF7) + val;
-					}
+					_GPU->GPUWrite(DMA, 0);
 					break;
 				}
 				
@@ -284,6 +278,11 @@ void Memory::MemoryWrite(GB_DB ad, GB_BY val) {
 				}
 				if (ad >= NR10 && ad <= 0xFF3F) {
 					_APU->APUWrite(ad, val);
+					break;
+				}
+				if (ad >= LCDC && ad <= WX) {
+					_GPU->GPUWrite(ad, val);//DMA will be catched before this.
+					break;
 				}
 				_memoryMapio[ad&0xFF] = val;
 			}
@@ -303,6 +302,9 @@ void Memory::ConnectTimer(Timer* timer) {
 }
 void Memory::ConnectAPU(APU* apu) {
 	_APU = apu;
+}
+void Memory::ConnectGPU(GPU* gpu) {
+	_GPU = gpu;
 }
 void Memory::Send(GB_BY interrupt) {
 	_memoryMapio[0xFF & IF] |= interrupt;
@@ -335,17 +337,7 @@ inline void Memory::KeyWrite(GB_BY val) {
 }
 
 
-void Memory::UpdateTile(GB_DB ad) {
-	GB_DB TileNo = (ad - 0x8000) / 16;
 
-	for (int i = 0; i < 8; i++) {
-		GB_BY Byte1 = _memoryGraphicsRam[TileNo * 16 + i * 2];
-		GB_BY Byte2 = _memoryGraphicsRam[TileNo * 16 + i * 2 + 1];
-		for (int j = 0; j < 8; j++) {
-			TileSet[TileNo][j][i] = ((Byte1 >> (7 - j)) & 1) + ((Byte2 >> (7 - j)) & 1) * 2;
-		}
-	}
-}
 
 
 int Memory::detectCartType(int &RomSize, int &RamSize, int &haveBettery, int &haveRam, int &haveMbc,int &CartType) {

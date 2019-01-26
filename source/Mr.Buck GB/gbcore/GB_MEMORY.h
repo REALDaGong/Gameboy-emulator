@@ -4,6 +4,7 @@
 #include "GB_SERIALIO.h"
 #include "GB_Timer.h"
 #include "GB_APU.h"
+#include "GB_GPU.h"
 /*
 Memory Manage Unit actually.
 Manage all W/R.
@@ -19,7 +20,7 @@ public:
 		Cart = NULL;
 		haveCart = 0; 
 		_memoryRomBank = NULL;
-		memset(TileSet, 0, sizeof(TileSet));
+		
 	};
 	~Memory() { 
 		if (haveCart)delete Cart;
@@ -29,7 +30,7 @@ public:
 	void MemoryWrite(GB_DB ad, GB_BY v);
 	
 	void ConnectTimer(Timer* Timer);
-	//void ConnectGPU(GPU* GPU);
+	void ConnectGPU(GPU* GPU);
 	void ConnectAPU(APU* APU);
 
 	void Init();
@@ -45,13 +46,25 @@ public:
 			}
 		}
 		_APU->SendClock(delta);
+		/*if (DMAEnable) {
+			for (int i = 0; i < delta; i++) {
+				MemoryWrite(0xFE00 + DMAptr, MemoryRead((_memoryMapio[0x46] << 8) + DMAptr));
+				DMAptr++;
+				if (DMAptr == 0xA0) {
+					DMAptr = 0;
+					DMAEnable = 0;
+					_GPU->GPUWrite(DMA, 0);
+					
+				}
+			}
+			
+		}*/
 	}//timing Serial IO and APU.
 	void Send(GB_BY Interrupt);//for other device sending interrupt
 	
 	GB_BY _memoryMapio[0x80];
 	GB_BY _inbios;
 	GB_BY _KeyRow[2];
-	GB_BY TileSet[384][8][8];
 	//be accessed very often.
 
 	Cartriage* Cart;
@@ -82,10 +95,8 @@ private:
 	
 	GB_BY _memoryRomBank0[0x4000];
 	GB_BY *_memoryRomBank;
-	GB_BY _memoryGraphicsRam[0x2000];
 	GB_BY *_memoryExteralRam;
 	GB_BY _memoryWorkingRam[0x2000];
-	GB_BY _memoryOam[0x100];
 	GB_BY _memoryZeroRam[0x80];
 	
 	void KeyReset();
@@ -93,10 +104,12 @@ private:
 	void KeyWrite(GB_BY val);
 	GB_BY _KeyCol;
 
-	void UpdateTile(GB_DB ad);//pre-tranlate the tile data into images,making GPU work faster.
+	int DMAReady;
+	int DMAEnable;
+	int DMAptr;
 
 	Timer *_Timer;
-	//GPU *_GPU;
+	GPU *_GPU;
 	APU *_APU;
 
 	int detectCartType(int &RomSize, int &RamSize, int &haveBettery, int &haveRam, int &haveMbc,int &CartType);

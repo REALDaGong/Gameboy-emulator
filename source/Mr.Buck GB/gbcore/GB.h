@@ -109,4 +109,5 @@ typedef uint8_t GB_BY;
 class Hardware {
 public:
 	virtual void Send(GB_BY INTERRUPT) = 0;
+	//should have Read,Write.....
 };

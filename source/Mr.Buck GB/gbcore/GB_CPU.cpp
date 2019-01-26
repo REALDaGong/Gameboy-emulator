@@ -1,1134 +1,1037 @@
-
-/*
-contains:
-all opcodes
-cpu main loop
-interrupt handler
-*/
-
-#include"GB_CPU.h"
-
+#include "GB_CPU.h"
 static array<function<int()>, 0x100 * sizeof(int)> OpCode;
-static array<function<int()>, 0x100 * sizeof(int)> CBOpCode;
-#define LO
-#ifdef LOG
-#include<iostream>
-#include<iomanip>
-#endif
-void Z80::Step() {
-#ifdef LOG
-	static int breakpoint = 0;
-	if (breakpoint==0&&_REG.PC > 0xFA) {
-		if (freopen("E:\\out.log", "w", stdout)) {
-			breakpoint = 1;
-		}
-		//debug breakpoint here.
-	}
-#endif
-	if (!isPause) {
-#ifdef LOG
-		
-		if (breakpoint) {
-			
-			cout << "AF:" << hex << setw(4) << ((((GB_DB)_REG.A) << 8) | (_REG.F)) << endl;
-			cout << "BC:" << hex << setw(4) << ((((GB_DB)_REG.B) << 8) | (_REG.C)) << endl;
-			cout << "DE:" << hex << setw(4) << ((((GB_DB)_REG.D) << 8) | (_REG.E)) << endl;
-			cout << "HL:" << hex << setw(4) << ((((GB_DB)_REG.H) << 8) | (_REG.L)) << endl;
-			cout << "SP:" << hex << setw(4) << _REG.SP << endl;
-			cout << "PC:" << hex << setw(4) << _REG.PC << endl;
-			cout << "TIM:" << hex << setw(2) << (GB_DB)_Memory.MemoryRead(0xFF04) << endl;
-			cout << "--------------------------------------------------------------------------------------------------------" << endl;
-		}
-#endif
-		Op = _Memory.MemoryRead(_REG.PC++);
-		delta = OpCode[Op]();//it can't make exactly timing.take 0xFO for an example,when write/read the memory,delta should be 8(prepare)+4(accessing mem),not just 12.
-							 //And when modifying,CPU reads at next-to-last cycle,and write at the last one. 
-		SendClock(delta);
-	}
-	else {
-		SendClock(4);
-	}
+void CPU::Init() {
 
-	if (_Memory.MemoryRead(IE)&_Memory.MemoryRead(IF)) {
-		isPause = 0;
-		if (_REG.IME) {
-			GB_BY IMEType = _Memory.MemoryRead(IE) & _Memory.MemoryRead(IF);
-			Interrupt(IMEType);
-			SendClock(20);
-			//it seems that a INTR transfer procedure will spend 20clks
-			//and it will stop the timer for a while
-			//i dont quite understand.
-		}
-	}
-		
-	
+#ifdef LOG
+	freopen("E:\\log.log", "w", stdout);
+#endif
+	reg.Init();
+	CpuState = 1;
+	IMEType = 0;
+	IME = 0;
+	cputick = 0;
+	IR = 0;
+	_AR = 0;
+	reg1 = reg2 = 0;
+	param = 0;
+	SpeedState = 0;
+	NextOp = NONE;
+#define JUMPBIO
+#ifdef JUMPBIOS
+	_Memory._inbios = 0;
+	reg.Set16(AF, 0x01B0);
+	reg.Set16(BC, 0x0013);
+	reg.Set16(DE, 0x00D8);
+	reg.Set16(HL, 0x014D);
+	reg.Set16(SP, 0xFFFE);
+	reg.SetPC(0x100);
+	_Memory.MemoryWrite(0xFF26, 0xF1);
+	_Memory.MemoryWrite(0xFF40, 0x91);
+	_Memory.MemoryWrite(0xFF47, 0xFC);
+	_Memory.MemoryWrite(0xFF48, 0xFF);
+	_Memory.MemoryWrite(0xFF49, 0xFF);
+	_Memory.MemoryWrite(0xFFFF, 0);
+#endif // JUMPBIOS
 
 }
-void Z80::Interrupt(GB_BY IMEtype) {
+void CPU::tick() {
+
+#define CORRUPTED_STOP 0
+#define RUN 1
+#define INTER 2
+#define STOP 3
+#define CPUHALT 4
+#define CB 5
+#define READ 0
+#define WRITE 1
+#define ACCESS_MEM 6//limited usage
+#define ACCESS_MEM_2 7
+#define ACCESS_MEM_MODIFY 8
+
+#define OPRAND 9
+#define OPRAND_2 10
+#define OPRAND_ALU 11
+
+#define RUN_WITH_EI 12
+	cputick++;
+	optick++;
+	if (cputick != (4 >> SpeedState))return;
+	cputick = 0;
+
+	//check Inter first
+	if (NextOp==NONE&&(_Memory.MemoryRead(IE)&_Memory.MemoryRead(IF))) {
+		if (CpuState == CPUHALT || CpuState == STOP)
+		{
+			CpuState = RUN;
+		}
+		if (IME) {
+			IME = 0;
+			IMEType = _Memory.MemoryRead(IE) & _Memory.MemoryRead(IF);
+			CpuState = INTER;
+			//it seems that a INTR transfer procedure will spend 20clks
+			//and it will stop the timer for a while(?)
+
+			//in fact,interrupts can be stopped during the transfer procedure.
+			//
+		}
+	}
+
+	switch (CpuState) {
+	case CORRUPTED_STOP: {
+		return;
+	}break;
+	case OPRAND_2: {
+
+		reg.Set8(reg1 + 1, _Memory.MemoryRead(reg.GetPC()));
+
+		reg.IncPC();
+		CpuState = OPRAND;
+	}break;
+	case OPRAND: {
+		reg.Set8(reg1, _Memory.MemoryRead(reg.GetPC()));
+		reg.IncPC();
+		CpuState = RUN;
+		NextOp = OpCode[NextOp]();
+	}break;
+	case OPRAND_ALU: {
+		reg.Set8(reg2, _Memory.MemoryRead(reg.GetPC()));
+		reg.IncPC();
+		CpuState = RUN;
+		NextOp = OpCode[NextOp]();
+	}break;
+	case ACCESS_MEM_MODIFY: {
+		reg.Set8(reg2, _Memory.MemoryRead(_AR));
+		NextOp = OpCode[NextOp]();
+		dir = WRITE;
+		CpuState = ACCESS_MEM;
+	}break;
+	case ACCESS_MEM_2: {
+
+		reg.Set8(reg2, _Memory.MemoryRead(_AR));
+		_AR++;
+		CpuState = ACCESS_MEM;
+	}break;
+	case ACCESS_MEM: {
+		if (dir == READ) {
+			reg.Set8(reg1, _Memory.MemoryRead(_AR));
+			NextOp = OpCode[NextOp]();
+		}
+		else
+			_Memory.MemoryWrite(_AR, reg.Get8(DR));
+		CpuState = RUN;
+	}break;
+	case RUN: {
+		if (NextOp == NONE) {
+#ifdef LOG
+			static int startLogging = 0;
+			if (reg.GetPC() > 0x100)startLogging = 1;
+			if(startLogging)reg.output();
+			
+			
+#endif //LOG
+		if (reg.GetPC() == 0xffc5) {
+				int breakpoint = 1;
+		}
+			optick = 0;
+			IR = fetch();
+		}
+		if (IR == 0xCB) {
+			CpuState = CB;
+			break;
+		}
+		if(CpuState==RUN||(CpuState==ACCESS_MEM&&dir==WRITE))
+			NextOp = OpCode[NextOp]();
+		
+	}break;
+	case RUN_WITH_EI: {
+		CpuState = RUN;
+		optick = 0;
+		IR = fetch();
+		
+		if (IR == 0xCB) {
+			CpuState = CB;
+			break;
+		}
+		
+		if (CpuState == RUN || (CpuState == ACCESS_MEM && dir == WRITE))
+			NextOp = OpCode[NextOp]();
+		IME = 1;
+		
+	}break;
+	case CB: {
+		
+		IR = fetchCB();
+		
+		if (CpuState == CB) {
+			NextOp = OpCode[NextOp]();
+			CpuState = RUN;
+		}
+	}break;
+	case INTER: {
+		static int InterStep = 0;
+		switch (InterStep) {
+		case 0:case 1:break;
+		case 2:reg.DecSP(); _Memory.MemoryWrite(reg.GetSP(), (reg.GetPC() & 0xFF00) >> 8);  break;
+		case 3:reg.DecSP(); _Memory.MemoryWrite(reg.GetSP(), reg.GetPC() & 0xFF); break;
+		case 4:InterHandle(IMEType); CpuState = RUN; InterStep = -1; IMEType = 0; break;
+		}
+		InterStep++;
+	}break;
+	case STOP: {
+		return;
+	}break;
+	case CPUHALT: {
+		return;
+	}break;
+	}
+}
+
+GB_BY CPU::fetch() {
+	GB_BY op = _Memory.MemoryRead(reg.GetPC());
+	reg.IncPC();
 	
-	_REG.IME = 0;
+	if (op == 0x00) {//NOP
+		NextOp = NOP;
+		return op;
+	}
+	if (op == 0xCB) {//CB
+		NextOp = NOP;
+		return op;
+	}
+	if (op == 0xF3) {//DI
+		NextOp = NOP;
+		IME = 0;
+		return op;
+	}
+	if (op == 0xFB) {//EI
+		NextOp = EI;
+		return op;
+	}
+	if (op == 0x76) {//HALT
+		CpuState = CPUHALT;
+		return NONE;
+	}
+	if (op == 0x10) {
+		CpuState = STOP;
+		reg.IncPC();
+		return NONE;
+	}
+	if (op < 0x40) {
+		switch (op & 0xF) {
+		case 0x0: {
+			NextOp = JR;
+			if (op == 0x20)
+				param = FLAG_NZ;
+			else
+				param = FLAG_NC;
+			CpuState = OPRAND;
+			reg1 = TMPH;
+		}break;
+		case 0x1: {
+			NextOp = LD16;
+			CpuState = OPRAND_2;
+			switch (op) {
+			case 0x01:reg1 = BC; break;
+			case 0x11:reg1 = DE; break;
+			case 0x21:reg1 = HL; break;
+			case 0x31:reg1 = SP; break;
+			}
+		}break;
+		case 0x2: {
+			NextOp = LD8;
+			CpuState = ACCESS_MEM;
+			dir = WRITE;
+			reg1 = DR;
+			reg2 = A;
+			switch (op) {
+			case 0x02:_AR = reg.Get16(BC); break;
+			case 0x12:_AR = reg.Get16(DE); break;
+			case 0x22:_AR = reg.Get16(HL); reg.IncHL(); break;
+			case 0x32:_AR = reg.Get16(HL); reg.DecHL(); break;//need ++ or -- HL
+			}
+
+		}break;
+		case 0x3: {
+			NextOp = INC16;
+			switch (op) {
+			case 0x03:reg1 = BC; break;
+			case 0x13:reg1 = DE; break;
+			case 0x23:reg1 = HL; break;
+			case 0x33:reg1 = SP; break;
+			}
+		}break;
+		case 0x4: {
+			NextOp = INC8;
+			switch (op) {
+			case 0x04:reg1 = B; break;
+			case 0x14:reg1 = D; break;
+			case 0x24:reg1 = H; break;
+			case 0x34:reg1 = DR;
+				reg2 = DR;
+				CpuState = ACCESS_MEM_MODIFY;
+				_AR = reg.Get16(HL);
+				break;
+			}
+		}break;
+		case 0x5: {
+			NextOp = DEC8;
+			switch (op) {
+			case 0x05:reg1 = B; break;
+			case 0x15:reg1 = D; break;
+			case 0x25:reg1 = H; break;
+			case 0x35:reg1 = DR;
+				reg2 = DR;
+				CpuState = ACCESS_MEM_MODIFY;
+				_AR = reg.Get16(HL);
+				break;
+			}
+		}break;
+		case 0x6: {
+
+			CpuState = OPRAND;
+			switch (op) {
+			case 0x06:reg1 = B; break;
+			case 0x16:reg1 = D; break;
+			case 0x26:reg1 = H; break;
+			case 0x36:reg1 = DR; CpuState = OPRAND; NextOp = LD8_MEM; break;
+			}
+		}break;
+		case 0x7: {
+			switch (op) {
+			case 0x07:NextOp = RLCA; break;
+			case 0x17:NextOp = RLA; break;
+			case 0x27:NextOp = DAA; break;
+			case 0x37:NextOp = SCF; break;
+			}
+		}break;
+		case 0x8: {
+			switch (op) {
+			case 0x08: NextOp = LDa16SP; break;
+			case 0x18: param = NONE; NextOp = JR;
+				CpuState = OPRAND;
+				reg1 = TMPH; break;
+			case 0x28: param = FLAG_Z; NextOp = JR;
+				CpuState = OPRAND;
+				reg1 = TMPH; break;
+			case 0x38: param = FLAG_C; NextOp = JR;
+				CpuState = OPRAND;
+				reg1 = TMPH; break;
+
+			}
+		}break;
+		case 0x9: {
+			NextOp = ADDHL;
+			reg1 = HL;
+			switch (op) {
+			case 0x09: reg2 = BC; break;
+			case 0x19: reg2 = DE; break;
+			case 0x29: reg2 = HL; break;
+			case 0x39: reg2 = SP; break;
+			}
+		}break;
+		case 0xA: {
+			NextOp = LDA;
+			reg2=reg1 = DR;
+			dir = READ;
+			CpuState = ACCESS_MEM;
+			switch (op) {
+			case 0x0A:_AR = reg.Get16(BC); break;
+			case 0x1A:_AR = reg.Get16(DE); break;
+			case 0x2A:_AR = reg.Get16(HL); reg.IncHL(); break;
+			case 0x3A:_AR = reg.Get16(HL); reg.DecHL(); break;
+			}
+		}break;
+		case 0xB: {
+			NextOp = DEC16;
+			switch (op) {
+			case 0x0B:reg1 = BC; break;
+			case 0x1B:reg1 = DE; break;
+			case 0x2B:reg1 = HL; break;
+			case 0x3B:reg1 = SP; break;
+			}
+		}break;
+		case 0xC: {
+			NextOp = INC8;
+			switch (op) {
+			case 0x0C:reg1 = C; break;
+			case 0x1C:reg1 = E; break;
+			case 0x2C:reg1 = L; break;
+			case 0x3C:reg1 = A; break;
+			}
+		}break;
+		case 0xD: {
+			NextOp = DEC8;
+			switch (op) {
+			case 0x0D:reg1 = C; break;
+			case 0x1D:reg1 = E; break;
+			case 0x2D:reg1 = L; break;
+			case 0x3D:reg1 = A; break;
+			}
+		}break;
+		case 0xE: {
+
+			CpuState = OPRAND;
+			switch (op) {
+			case 0x0E:reg1 = C; break;
+			case 0x1E:reg1 = E; break;
+			case 0x2E:reg1 = L; break;
+			case 0x3E:reg1 = A; break;
+			}
+		}break;
+		case 0xF: {
+			switch (op) {
+			case 0x0F:NextOp = RRCA; break;
+			case 0x1F:NextOp = RRA; break;
+			case 0x2F:NextOp = CPL; break;
+			case 0x3F:NextOp = CCF; break;
+			}
+		}break;
+		}
+	}
+	else if (op < 0xC0) {
+		switch (op & 0xF) {
+		case 0x0:reg2 = B;  break;
+		case 0x1:reg2 = C;  break;
+		case 0x2:reg2 = D;  break;
+		case 0x3:reg2 = E; break;
+		case 0x4:reg2 = H; break;
+		case 0x5:reg2 = L; break;
+		case 0x6:reg2 = DR; CpuState = ACCESS_MEM; dir = READ; _AR = reg.Get16(HL); break;//1.
+		case 0x7:reg2 = A; break;
+		case 0x8:reg2 = B; break;
+		case 0x9:reg2 = C; break;
+		case 0xA:reg2 = D; break;
+		case 0xB:reg2 = E; break;
+		case 0xC:reg2 = H; break;
+		case 0xD:reg2 = L; break;
+		case 0xE:reg2 = DR; CpuState = ACCESS_MEM; dir = READ; _AR = reg.Get16(HL); break;
+		case 0xF:reg2 = A; break;
+		}
+		if (op < 0x80) {
+			if ((op & 0xF) != 0x6 && (op & 0xF) != 0xE)NextOp = LD8;
+			else NextOp = NONE;
+			if ((op & 0xF) < 0x8) {
+				switch (op & 0xF0) {
+				case 0x40:reg1 = B; break;
+				case 0x50:reg1 = D; break;
+				case 0x60:reg1 = H; break;
+				case 0x70:reg1 = DR; CpuState = ACCESS_MEM; dir = WRITE; _AR = reg.Get16(HL); break;
+				}
+			}
+			else {
+				switch (op & 0xF0) {
+				case 0x40:reg1 = C; break;
+				case 0x50:reg1 = E; break;
+				case 0x60:reg1 = L; break;
+				case 0x70:reg1 = A; break;
+				}
+			}
+		}
+		else {
+			reg1 = DR;
+			if ((op & 0xF) < 0x8) {
+				switch (op & 0xF0) {
+				case 0x80:NextOp = ADD; break;
+				case 0x90:NextOp = SUB; break;
+				case 0xA0:NextOp = AND; break;
+				case 0xB0:NextOp = OR;  break;
+				}
+			}
+			else {
+				switch (op & 0xF0) {
+				case 0x80:NextOp = ADC; break;
+				case 0x90:NextOp = SBC; break;
+				case 0xA0:NextOp = XOR; break;
+				case 0xB0:NextOp = CP;  break;
+				}
+			}
+		}
+	}
+	else {
+		switch (op) {
+		case 0xC0: NextOp = RET; param = FLAG_NZ; break;
+		case 0xD0: NextOp = RET; param = FLAG_NC; break;
+		case 0xE0: NextOp = LDHa8A; CpuState = OPRAND; reg1 = TMPH; break;
+		case 0xF0: NextOp = LDHAa8; CpuState = OPRAND; reg1 = TMPH; break;
+		case 0xC1: NextOp = POP; reg1 = BC; break;
+		case 0xD1: NextOp = POP; reg1 = DE; break;
+		case 0xE1: NextOp = POP; reg1 = HL; break;
+		case 0xF1: NextOp = POP; reg1 = AF; break;
+		case 0xC2: NextOp = JP; param = FLAG_NZ; CpuState = OPRAND_2; reg1 = TMP; break;
+		case 0xD2: NextOp = JP; param = FLAG_NC; CpuState = OPRAND_2; reg1 = TMP; break;
+		case 0xE2: NextOp = NONE; reg.Set8(DR, reg.Get8(A)); dir = WRITE; _AR = 0xFF00 | reg.Get8(C); CpuState = ACCESS_MEM; break;
+		case 0xF2: NextOp = NONE; reg1 = A; dir = READ; _AR = 0xFF00 | reg.Get8(C); CpuState = ACCESS_MEM; break;
+		case 0xC3: NextOp = JP; param = NONE; CpuState = OPRAND_2; reg1 = TMP; break;
+		case 0xC4: NextOp = CALL; param = FLAG_NZ; CpuState = OPRAND_2; reg1 = TMP; break;
+		case 0xD4: NextOp = CALL; param = FLAG_NC; CpuState = OPRAND_2; reg1 = TMP; break;
+		case 0xC5: NextOp = PUSH; reg1 = BC; break;
+		case 0xD5: NextOp = PUSH; reg1 = DE; break;
+		case 0xE5: NextOp = PUSH; reg1 = HL; break;
+		case 0xF5: NextOp = PUSH; reg1 = AF; break;
+		case 0xC6: NextOp = ADD; reg2 = TMPL; CpuState = OPRAND_ALU; break;
+		case 0xD6: NextOp = SUB; reg2 = TMPL; CpuState = OPRAND_ALU; break;
+		case 0xE6: NextOp = AND; reg2 = TMPL; CpuState = OPRAND_ALU; break;
+		case 0xF6: NextOp = OR; reg2 = TMPL; CpuState = OPRAND_ALU; break;
+		case 0xC7: NextOp = RST; param = 0x00; break;
+		case 0xD7: NextOp = RST; param = 0x10; break;
+		case 0xE7: NextOp = RST; param = 0x20; break;
+		case 0xF7: NextOp = RST; param = 0x30; break;
+		case 0xC8: NextOp = RET; param = FLAG_Z; break;
+		case 0xD8: NextOp = RET; param = FLAG_C; break;
+		case 0xE8: NextOp = ADDSP_DELAY; CpuState = OPRAND; reg1 = TMPH; break;
+		case 0xF8: NextOp = LDHLSP; CpuState = OPRAND; reg1 = TMPH; break;
+		case 0xC9: NextOp = RET_NO_CC; param = NONE; break;
+		case 0xD9: NextOp = RETI; break;
+		case 0xE9: NextOp = JPHL; break;
+		case 0xF9: NextOp = LDSPHL; break;
+		case 0xCA: NextOp = JP; param = FLAG_Z; CpuState = OPRAND_2; reg1 = TMP; break;
+		case 0xDA: NextOp = JP; param = FLAG_C; CpuState = OPRAND_2; reg1 = TMP; break;
+		case 0xEA: NextOp = LDHa16A; CpuState = OPRAND_2; reg1 = TMP; break;
+		case 0xFA: NextOp = LDHAa16; CpuState = OPRAND_2; reg1 = TMP; break;
+		case 0xCC: NextOp = CALL; param = FLAG_Z; CpuState = OPRAND_2; reg1 = TMP; break;
+		case 0xDC: NextOp = CALL; param = FLAG_C; CpuState = OPRAND_2; reg1 = TMP; break;
+		case 0xCD: NextOp = CALL; param = NONE; CpuState = OPRAND_2; reg1 = TMP; break;
+		case 0xCE: NextOp = ADC; reg2 = TMPL; CpuState = OPRAND_ALU; break;
+		case 0xDE: NextOp = SBC; reg2 = TMPL; CpuState = OPRAND_ALU; break;
+		case 0xEE: NextOp = XOR; reg2 = TMPL; CpuState = OPRAND_ALU; break;
+		case 0xFE: NextOp = CP; reg2 = TMPL; CpuState = OPRAND_ALU; break;
+		case 0xCF: NextOp = RST; param = 0x08; break;
+		case 0xDF: NextOp = RST; param = 0x18; break;
+		case 0xEF: NextOp = RST; param = 0x28; break;
+		case 0xFF: NextOp = RST; param = 0x38; break;
+		default:
+			NextOp = NONE;
+			CpuState = CORRUPTED_STOP;//invalid opcodes
+		}
+	}
+	return op;
+}
+GB_BY CPU::fetchCB() {
+	GB_BY op = _Memory.MemoryRead(reg.GetPC());
+	reg.IncPC();
+	switch (op & 0xF) {
+	case 0x0:reg2 = B; break;
+	case 0x1:reg2 = C; break;
+	case 0x2:reg2 = D; break;
+	case 0x3:reg2 = E; break;
+	case 0x4:reg2 = H; break;
+	case 0x5:reg2 = L; break;
+	case 0x6:reg2 = DR; _AR = reg.Get16(HL); CpuState = ACCESS_MEM_MODIFY;  break;//1.
+	case 0x7:reg2 = A; break;
+	case 0x8:reg2 = B; break;
+	case 0x9:reg2 = C; break;
+	case 0xA:reg2 = D; break;
+	case 0xB:reg2 = E; break;
+	case 0xC:reg2 = H; break;
+	case 0xD:reg2 = L; break;
+	case 0xE:reg2 = DR; _AR = reg.Get16(HL); CpuState = ACCESS_MEM_MODIFY;  break;
+	case 0xF:reg2 = A; break;
+	}
+	if (op < 0x40) {
+		if ((op & 0xF) < 0x8) {
+			switch (op & 0xF0) {
+			case 0x00:NextOp = RLC; break;
+			case 0x10:NextOp = RL; break;
+			case 0x20:NextOp = SLA; break;
+			case 0x30:NextOp = SWAP; break;
+			}
+		}
+		else {
+			switch (op & 0xF0) {
+			case 0x00:NextOp = RRC; break;
+			case 0x10:NextOp = RR; break;
+			case 0x20:NextOp = SRA; break;
+			case 0x30:NextOp = SRL; break;
+			}
+		}
+	}
+	else {//BIT consume 4 clocks less than regular CB ins,because there is no need to writeback;
+		if (op < 0x80) {
+			if (((op & 0xF) == 0x6) || ((op & 0xF) == 0xE)) {
+				CpuState = ACCESS_MEM;
+				dir = READ;
+				reg1 = DR;
+			}
+			NextOp = BIT;
+			param = (op - 0x40) / 8;
+		}
+		else if (op < 0xC0) {
+			NextOp = RES;
+			param = (op - 0x80) / 8;
+		}
+		else {
+			NextOp = SET;
+			param = (op - 0xC0) / 8;
+		}
+	}
+	return op;
+}
+void CPU::BuildOps() {
+	OpCode[EI] = [&]()->int {CpuState = RUN_WITH_EI; return NONE; };
+	OpCode[NONE] = [&]()->int {return NONE; };
+	OpCode[NOP] = [&]()->int {return NONE; };
+	OpCode[DELAY] = [&]()->int {return NONE; };
+	OpCode[LD8] = [&]()->int {reg.Set8(reg1, reg.Get8(reg2)); return NONE; };
+	OpCode[LD16] = [&]()->int {return NONE; };
+	OpCode[LDSPHL] = [&]()->int {reg.Set8(SPL, reg.Get8(L)); return LDSPHL_2; };
+	OpCode[LDSPHL_2] = [&]()->int {reg.Set8(SPH, reg.Get8(H)); return NONE; };
+	OpCode[LDA] = [&]()->int {reg.Set8(A, reg.Get8(reg2)); return NONE; };
+	OpCode[LDHa8A] = [&]()->int {CpuState = ACCESS_MEM; dir = WRITE; _AR = 0xFF00 | reg.Get8(TMPH); reg.Set8(DR, reg.Get8(A)); return NONE; };
+	OpCode[LDHAa8] = [&]()->int {CpuState = ACCESS_MEM; dir = READ; _AR = 0xFF00 | reg.Get8(TMPH); reg1 = A; return NONE; };
+	OpCode[LDHa16A] = [&]()->int {CpuState = ACCESS_MEM; dir = WRITE; _AR = reg.Get16(TMP); reg.Set8(DR, reg.Get8(A)); return NONE; };
+	OpCode[LDHAa16] = [&]()->int {CpuState = ACCESS_MEM; dir = READ; _AR = reg.Get16(TMP); reg1 = A; return NONE; };
+	OpCode[JR] = [&]()->int {if (reg.TestFlag(param))return JR_JUMP; else return NONE; };
+	OpCode[JR_JUMP] = [&]()->int {reg.SetPC(reg.GetPC() + (__int8)reg.Get8(TMPH)); return NONE; };
+	OpCode[JP] = [&]()->int {if (reg.TestFlag(param))return JP_JUMP; else return NONE; };
+	OpCode[JP_JUMP] = [&]()->int {reg.SetPC(reg.Get16(TMP)); return NONE; };
+	OpCode[JPHL] = [&]()->int {reg.SetPC(reg.Get16(HL)); return NONE; };
+	OpCode[CALL_2] = [&]()->int {return CALL_JUMP; };
+	OpCode[CALL] = [&]()->int {if (reg.TestFlag(param))return CALL_2; else return NONE; };
+	OpCode[CALL_JUMP] = [&]()->int {reg.DecSP(); _Memory.MemoryWrite(reg.Get16(SP), (reg.GetPC() & 0xFF00) >> 8);  reg.SetPCHigh(reg.Get8(TMPH)); return CALL_JUMP_2; };
+	OpCode[CALL_JUMP_2] = [&]()->int {reg.DecSP(); _Memory.MemoryWrite(reg.Get16(SP), (reg.GetPC() & 0xFF)); reg.SetPCLow(reg.Get8(TMPL)); return NONE; };
+	OpCode[RET] = [&]()->int {return RET_2; };
+	OpCode[RET_2] = [&]()->int {if (reg.TestFlag(param))return RET_JUMP; else return NONE; };
+	OpCode[RET_JUMP] = [&]()->int {reg.SetPCLow(_Memory.MemoryRead(reg.Get16(SP))); reg.IncSP();  return RET_JUMP_2; };
+	OpCode[RET_JUMP_2] = [&]()->int { reg.SetPCHigh(_Memory.MemoryRead(reg.Get16(SP))); reg.IncSP(); return RET_JUMP_3; };
+	OpCode[RET_JUMP_3] = [&]()->int { return NONE; };
+	OpCode[RET_NO_CC] = [&]()->int {return RET_JUMP; };
+	OpCode[RETI] = [&]()->int {IME = 1; return RET_JUMP; };
+	OpCode[RST] = [&]()->int {return RST_2; };
+	OpCode[RST_2] = [&]()->int {reg.Set8(TMPH, 0); reg.Set8(TMPL, param & 0xFF); return CALL_JUMP; };
+	OpCode[POP] = [&]()->int { return POP_2; };
+	OpCode[POP_2] = [&]()->int { reg.Set8(reg1 + 1, _Memory.MemoryRead(reg.Get16(SP))); reg.IncSP(); return POP_3; };
+	OpCode[POP_3] = [&]()->int { reg.Set8(reg1, _Memory.MemoryRead(reg.Get16(SP))); reg.IncSP(); return NONE; };
+	OpCode[PUSH] = [&]()->int {return PUSH_2; };
+	OpCode[PUSH_2] = [&]()->int {_AR = reg.Get16(SP)-1; return PUSH_3; };
+	OpCode[PUSH_3] = [&]()->int { reg.DecSP(); _Memory.MemoryWrite(_AR, reg.Get8(reg1)); return PUSH_4; };
+	OpCode[PUSH_4] = [&]()->int { reg.DecSP(); _Memory.MemoryWrite(_AR - 1, reg.Get8(reg1 + 1)); return NONE; };
+	OpCode[ADDSP_DELAY] = [&]()->int {return ADDSP; };
+	OpCode[ADDSP] = [&]()->int {
+
+		__int8 by = (__int8)reg.Get8(TMPH);
+		GB_DB regSP = reg.Get16(SP);
+		int re = regSP + by;
+		if ((((regSP & 0x0F) + (by & 0x0F)) & 0x10) != 0)
+			reg.SetFlag(FLAG_HACA);
+		else
+			reg.ResetFlag(FLAG_HACA);
+		if ((((regSP & 0xFF) + (by & 0xFF)) & 0x100) != 0)
+			reg.SetFlag(FLAG_CARY);
+		else
+			reg.ResetFlag(FLAG_CARY);
+
+		reg.ResetFlag(FLAG_ZERO);
+		reg.ResetFlag(FLAG_NEGA);
+		reg.Set8(SPL, re & 0xff);
+		param = re;
+		return ADDSP_2;
+	};
+	OpCode[ADDSP_2] = [&]()->int {reg.Set8(SPH, (param & 0xFF00)>>8); return NONE; };
+	OpCode[LDHLSP] = [&]()->int {
+		__int8 by = (__int8)reg.Get8(TMPH);
+		GB_DB regSP = reg.Get16(SP);
+		int re = regSP + by;
+		if ((((regSP & 0x0F) + (by & 0x0F)) & 0x10) != 0)
+			reg.SetFlag(FLAG_HACA);
+		else
+			reg.ResetFlag(FLAG_HACA);
+		if ((((regSP & 0xFF) + (by & 0xFF)) & 0x100) != 0)
+			reg.SetFlag(FLAG_CARY);
+		else
+			reg.ResetFlag(FLAG_CARY);
+
+		reg.ResetFlag(FLAG_ZERO);
+		reg.ResetFlag(FLAG_NEGA);
+		reg.Set8(L, re & 0xff);
+		param = re;
+		return LDHLSP_2;
+	};
+	OpCode[LDHLSP_2] = [&]()->int {reg.Set8(H, (param & 0xFF00)>>8); return NONE; };
+	OpCode[INC16] = [&]()->int {GB_BY tmp = reg.Get8(reg1 + 1); if (tmp == 0xFF)param = 1; else param = 0; reg.Set8(reg1 + 1, tmp + 1); return INC16_2; };
+	OpCode[INC16_2] = [&]()->int {if (param)reg.Set8(reg1, reg.Get8(reg1) + 1); return NONE; };
+	OpCode[DEC16] = [&]()->int {GB_BY tmp = reg.Get8(reg1 + 1); if (tmp == 0x00)param = 1; else param = 0; reg.Set8(reg1 + 1, tmp - 1); return DEC16_2; };
+	OpCode[DEC16_2] = [&]()->int {if (param)reg.Set8(reg1, reg.Get8(reg1) - 1); return NONE; };
+	OpCode[INC8] = [&]()->int {GB_BY tmp = reg.Get8(reg1) + 1; reg.Set8(reg1, tmp); reg.ResetFlag(FLAG_NEGA); if (tmp == 0)reg.SetFlag(FLAG_ZERO); else reg.ResetFlag(FLAG_ZERO); if ((tmp ^ (tmp - 1)) & 0x10)reg.SetFlag(FLAG_HACA); else reg.ResetFlag(FLAG_HACA); return NONE; };
+	OpCode[DEC8] = [&]()->int {GB_BY tmp = reg.Get8(reg1) - 1; reg.Set8(reg1, tmp); reg.SetFlag(FLAG_NEGA); if (tmp == 0)reg.SetFlag(FLAG_ZERO); else reg.ResetFlag(FLAG_ZERO); if ((tmp ^ (tmp + 1)) & 0x10)reg.SetFlag(FLAG_HACA); else reg.ResetFlag(FLAG_HACA); return NONE; };
+	OpCode[RLCA] = [&]()->int {
+		GB_BY tmp = reg.Get8(A);
+		GB_BY by = 0x80 & tmp;
+		tmp <<= 1;
+		tmp |= by >> 7;
+		reg.Set8(A, tmp);
+		reg.ResetFlag(FLAG_ZERO);
+		reg.ResetFlag(FLAG_NEGA);
+		reg.ResetFlag(FLAG_HACA);
+		if (by)reg.SetFlag(FLAG_CARY); else reg.ResetFlag(FLAG_CARY);
+		return NONE;
+	};
+	OpCode[RLA] = [&]()->int {
+		GB_BY tmp = reg.Get8(A);
+		GB_BY by = 0x80 & tmp;
+
+		
+		tmp <<= 1;
+		tmp |= reg.TestFlag(FLAG_CARY) ? 1 : 0;
+		reg.Set8(A, tmp);
+		if (by)reg.SetFlag(FLAG_CARY); else reg.ResetFlag(FLAG_CARY);
+		reg.ResetFlag(FLAG_ZERO);
+		reg.ResetFlag(FLAG_NEGA);
+		reg.ResetFlag(FLAG_HACA);
+		return NONE;
+	};
+	OpCode[DAA] = [&]()->int {
+		GB_DB tmp = reg.Get8(A);
+		if (reg.TestFlag(FLAG_NEGA)) {
+			if (reg.TestFlag(FLAG_HACA)) {
+				tmp = (tmp - 0x06) & 0xff;
+			}
+			if (reg.TestFlag(FLAG_CARY)) {
+				tmp = (tmp - 0x60) & 0xff;
+			}
+		}
+		else {
+			if (reg.TestFlag(FLAG_HACA) || (tmp & 0xf) > 9) {
+				tmp += 0x06;
+			}
+			if (reg.TestFlag(FLAG_CARY) || tmp> 0x9f) {
+				tmp += 0x60;
+			}
+		}
+		reg.ResetFlag(FLAG_HACA);
+		if (tmp > 0xff) {
+			reg.SetFlag(FLAG_CARY);
+		}
+		tmp &= 0xff;
+		if (tmp == 0)reg.SetFlag(FLAG_ZERO); else reg.ResetFlag(FLAG_ZERO);
+		reg.Set8(A, tmp);
+		return NONE;
+	};
+	OpCode[SCF] = [&]()->int {
+		reg.SetFlag(FLAG_CARY);
+		reg.ResetFlag(FLAG_NEGA);
+		reg.ResetFlag(FLAG_HACA);
+		return NONE;
+	};
+	OpCode[RRCA] = [&]()->int {
+		GB_BY tmp = reg.Get8(A);
+		GB_BY by = 0x1 & tmp;
+		tmp >>= 1;
+		tmp |= by << 7;
+		reg.Set8(A, tmp);
+		reg.ResetFlag(FLAG_ZERO);
+		reg.ResetFlag(FLAG_NEGA);
+		reg.ResetFlag(FLAG_HACA);
+		if (by)reg.SetFlag(FLAG_CARY); else reg.ResetFlag(FLAG_CARY);
+		return NONE;
+	};
+	OpCode[RRA] = [&]()->int {
+		GB_BY tmp = reg.Get8(A);
+		GB_BY by = 0x1 & tmp;
+
+		
+		tmp >>= 1;
+		tmp |= reg.TestFlag(FLAG_CARY) ? 0x80 : 0;
+		reg.Set8(A, tmp);
+		if (by)reg.SetFlag(FLAG_CARY); else reg.ResetFlag(FLAG_CARY);
+		reg.ResetFlag(FLAG_ZERO);
+		reg.ResetFlag(FLAG_NEGA);
+		reg.ResetFlag(FLAG_HACA);
+		return NONE;
+	};
+	OpCode[CPL] = [&]()->int {reg.SetFlag(FLAG_NEGA); reg.SetFlag(FLAG_HACA); reg.Set8(A, ~reg.Get8(A)); return NONE; };
+	OpCode[CCF] = [&]()->int {reg.ResetFlag(FLAG_NEGA); reg.ResetFlag(FLAG_HACA); if (reg.TestFlag(FLAG_CARY)) reg.ResetFlag(FLAG_CARY); else reg.SetFlag(FLAG_CARY); return NONE; };
+	OpCode[LD8_MEM] = [&]()->int {CpuState = ACCESS_MEM; dir = WRITE; _AR = reg.Get16(HL);return NONE; };
+	OpCode[LDa16SP] = [&]()->int {return LDa16SP_2; };
+	OpCode[LDa16SP_2] = [&]()->int {_AR = _Memory.MemoryRead(reg.GetPC()); reg.IncPC(); return LDa16SP_3; };
+	OpCode[LDa16SP_3] = [&]()->int {_AR |= (GB_DB)(_Memory.MemoryRead(reg.GetPC()) << 8); reg.IncPC(); return LDa16SP_4; };
+	OpCode[LDa16SP_4] = [&]()->int {_Memory.MemoryWrite(_AR, reg.Get8(SPL)); _AR++; return LDa16SP_5; };
+	OpCode[LDa16SP_5] = [&]()->int {_Memory.MemoryWrite(_AR, reg.Get8(SPH)); return NONE; };
+
+	OpCode[ADDHL] = [&]()->int {
+		GB_DB hl = (reg.Get8(H) << 8) + reg.Get8(L);
+		GB_DB db = (reg.Get8(reg2) << 8) + reg.Get8(reg2 + 1);
+		uint32_t re = hl + db;
+		reg.ResetFlag(FLAG_NEGA);
+		if (((hl & 0x0fff) + (db & 0x0fff)) > 0x0fff)reg.SetFlag(FLAG_HACA); else reg.ResetFlag(FLAG_HACA);
+		if (re> 0xffff) reg.SetFlag(FLAG_CARY); else reg.ResetFlag(FLAG_CARY);
+		reg.Set8(H, (re & 0xFF00) >> 8);
+		param = re & 0xFF;
+		return ADDHL_2;
+	};
+	OpCode[ADDHL_2] = [&]()->int {
+		reg.Set8(L, param);
+		return NONE;
+	};
+	OpCode[ADD] = [&]()->int {
+		GB_BY regA = reg.Get8(A);
+		GB_BY regb = reg.Get8(reg2);
+		reg.ResetFlag(FLAG_NEGA);
+		GB_DB re = regA + regb;
+		if ((re & 0xff) == 0)reg.SetFlag(FLAG_ZERO); else reg.ResetFlag(FLAG_ZERO);
+		if (((regA & 0x0F) + (regb & 0x0F)) & 0x10)reg.SetFlag(FLAG_HACA); else reg.ResetFlag(FLAG_HACA);
+		if (re > 0xff)reg.SetFlag(FLAG_CARY); else reg.ResetFlag(FLAG_CARY);
+		reg.Set8(A, re & 0xFF);
+		return NONE;
+	};
+	OpCode[ADC] = [&]()->int {
+		reg.ResetFlag(FLAG_NEGA);
+		GB_BY regA = reg.Get8(A);
+		GB_BY regb = reg.Get8(reg2);
+		GB_DB re = regA + regb + (reg.TestFlag(FLAG_CARY) ? 1 : 0);
+		if ((re & 0xFF) == 0)reg.SetFlag(FLAG_ZERO); else reg.ResetFlag(FLAG_ZERO);
+		if (((regA&0x0F) + (regb&0x0F) + (reg.TestFlag(FLAG_CARY) ? 1 : 0)) & 0x10)reg.SetFlag(FLAG_HACA); else reg.ResetFlag(FLAG_HACA);
+		if (re > 0xFF)reg.SetFlag(FLAG_CARY); else reg.ResetFlag(FLAG_CARY);
+		reg.Set8(A, re & 0xFF);
+		return NONE;
+	};
+	OpCode[SUB] = [&]()->int {
+		reg.SetFlag(FLAG_NEGA);
+		GB_BY regA = reg.Get8(A);
+		GB_BY regb = reg.Get8(reg2);
+		GB_DB re = regA - regb;
+		if ((re & 0xFF) == 0)reg.SetFlag(FLAG_ZERO); else reg.ResetFlag(FLAG_ZERO);
+		if ((regA & 0x0F) < (regb & 0x0F))reg.SetFlag(FLAG_HACA); else reg.ResetFlag(FLAG_HACA);
+		if (regA < regb)reg.SetFlag(FLAG_CARY); else reg.ResetFlag(FLAG_CARY);
+		reg.Set8(A, re & 0xFF);
+		return NONE;
+	};
+	OpCode[SBC] = [&]()->int {
+		reg.SetFlag(FLAG_NEGA);
+		GB_BY regA = reg.Get8(A);
+		GB_BY regb = reg.Get8(reg2);
+		GB_DB re = regA - regb - reg.TestFlag(FLAG_CARY);
+		if ((re & 0xFF) == 0)reg.SetFlag(FLAG_ZERO); else reg.ResetFlag(FLAG_ZERO);
+		if (((regA ^ regb ^ (re & 0xff)) & (1 << 4)) != 0)reg.SetFlag(FLAG_HACA); else reg.ResetFlag(FLAG_HACA);
+		if (re & 0x100)reg.SetFlag(FLAG_CARY); else reg.ResetFlag(FLAG_CARY);
+		reg.Set8(A, re & 0xFF);
+		return NONE;
+	};
+	OpCode[AND] = [&]()->int {
+		GB_BY regA = reg.Get8(A);
+		GB_BY re = regA & reg.Get8(reg2);
+		reg.Set8(A, re);
+		if (re == 0)reg.SetFlag(FLAG_ZERO); else reg.ResetFlag(FLAG_ZERO);
+		reg.ResetFlag(FLAG_NEGA);
+		reg.SetFlag(FLAG_HACA);
+		reg.ResetFlag(FLAG_CARY);
+		return NONE;
+	};
+	OpCode[XOR] = [&]()->int {
+		GB_BY regA = reg.Get8(A);
+		GB_BY re = regA ^ reg.Get8(reg2);
+		reg.Set8(A, re);
+		if (re == 0)reg.SetFlag(FLAG_ZERO); else reg.ResetFlag(FLAG_ZERO);
+		reg.ResetFlag(FLAG_NEGA);
+		reg.ResetFlag(FLAG_HACA);
+		reg.ResetFlag(FLAG_CARY);
+		return NONE;
+	};
+	OpCode[OR] = [&]()->int {
+		GB_BY regA = reg.Get8(A);
+		GB_BY re = regA | reg.Get8(reg2);
+		reg.Set8(A, re);
+		if (re == 0)reg.SetFlag(FLAG_ZERO); else reg.ResetFlag(FLAG_ZERO);
+		reg.ResetFlag(FLAG_NEGA);
+		reg.ResetFlag(FLAG_HACA);
+		reg.ResetFlag(FLAG_CARY);
+		return NONE;
+	};
+	OpCode[CP] = [&]()->int {
+		reg.SetFlag(FLAG_NEGA);
+		GB_BY regA = reg.Get8(A);
+		GB_BY regb = reg.Get8(reg2);
+		GB_DB re = regA - regb;
+		if ((re & 0xFF) == 0)reg.SetFlag(FLAG_ZERO); else reg.ResetFlag(FLAG_ZERO);
+		if ((regA & 0x0F) < (regb & 0x0F))reg.SetFlag(FLAG_HACA); else reg.ResetFlag(FLAG_HACA);
+		if (regA < regb)reg.SetFlag(FLAG_CARY); else reg.ResetFlag(FLAG_CARY);
+		return NONE;
+	};
+	OpCode[RLC] = [&]()->int {
+		int arg = reg.Get8(reg2);
+		int re = (arg << 1) & 0xff;
+		if ((arg&(1 << 7)) != 0) {
+			re |= 1;
+			reg.SetFlag(FLAG_CARY);
+		}
+		else {
+			reg.ResetFlag(FLAG_CARY);
+
+		}
+		if (re == 0)
+			reg.SetFlag(FLAG_ZERO);
+		else
+			reg.ResetFlag(FLAG_ZERO);
+		reg.ResetFlag(FLAG_NEGA);
+		reg.ResetFlag(FLAG_HACA);
+		reg.Set8(reg2, re & 0xFF);
+		return NONE;
+	};
+	OpCode[RRC] = [&]()->int {
+		int arg = reg.Get8(reg2);
+		int re = arg >> 1;
+		if ((arg & 1) == 1) {
+			re |= (1 << 7);
+			reg.SetFlag(FLAG_CARY);
+		}
+		else {
+			reg.ResetFlag(FLAG_CARY);
+
+		}
+		if (re == 0)
+			reg.SetFlag(FLAG_ZERO);
+		else
+			reg.ResetFlag(FLAG_ZERO);
+		reg.ResetFlag(FLAG_NEGA);
+		reg.ResetFlag(FLAG_HACA);
+		reg.Set8(reg2, re & 0xFF);
+		return NONE;
+	};
+	OpCode[RL] = [&]()->int {
+		int arg = reg.Get8(reg2);
+		int re = (arg << 1) & 0xff;
+		re |= reg.TestFlag(FLAG_CARY) ? 1 : 0;
+		if (re == 0)
+			reg.SetFlag(FLAG_ZERO);
+		else
+			reg.ResetFlag(FLAG_ZERO);
+		reg.ResetFlag(FLAG_NEGA);
+		reg.ResetFlag(FLAG_HACA);
+		if ((arg&(1 << 7)) != 0)
+			reg.SetFlag(FLAG_CARY);
+		else
+			reg.ResetFlag(FLAG_CARY);
+		reg.Set8(reg2, re & 0xFF);
+		return NONE;
+	};
+	OpCode[RR] = [&]()->int {
+		int arg = reg.Get8(reg2);
+		int re = arg >> 1;
+		re |= reg.TestFlag(FLAG_CARY) ? 0x80 : 0;
+		if (re == 0)
+			reg.SetFlag(FLAG_ZERO);
+		else
+			reg.ResetFlag(FLAG_ZERO);
+		reg.ResetFlag(FLAG_NEGA);
+		reg.ResetFlag(FLAG_HACA);
+		if ((arg & 1) != 0)
+			reg.SetFlag(FLAG_CARY);
+		else
+			reg.ResetFlag(FLAG_CARY);
+		reg.Set8(reg2, re & 0xFF);
+		return NONE;
+	};
+	OpCode[SLA] = [&]()->int {
+		GB_BY REG = reg.Get8(reg2);
+		GB_BY by = 0x80 & REG;
+		REG <<= 1;
+		if (REG == 0)
+			reg.SetFlag(FLAG_ZERO);
+		else
+			reg.ResetFlag(FLAG_ZERO);
+		reg.ResetFlag(FLAG_NEGA);
+		reg.ResetFlag(FLAG_HACA);
+		if (by)
+			reg.SetFlag(FLAG_CARY);
+		else
+			reg.ResetFlag(FLAG_CARY);
+		reg.Set8(reg2, REG);
+		return NONE;
+	};
+	OpCode[SRA] = [&]()->int {
+		GB_BY REG = reg.Get8(reg2);
+		GB_BY by = 0x80 & REG;
+		GB_BY c = 0x1 & REG;
+		REG >>= 1;
+		REG += by;
+		if (REG == 0)
+			reg.SetFlag(FLAG_ZERO);
+		else
+			reg.ResetFlag(FLAG_ZERO);
+		reg.ResetFlag(FLAG_NEGA);
+		reg.ResetFlag(FLAG_HACA);
+		if (c)
+			reg.SetFlag(FLAG_CARY);
+		else
+			reg.ResetFlag(FLAG_CARY);
+		reg.Set8(reg2, REG);
+		return NONE;
+	};
+	OpCode[SWAP] = [&]()->int {
+		GB_BY REG = reg.Get8(reg2);
+		GB_BY tmpl = REG & 0xF;
+		GB_BY tmph = REG & 0xF0;
+		REG = (tmph >> 4) | (tmpl << 4);
+		if (REG == 0)
+			reg.SetFlag(FLAG_ZERO);
+		else
+			reg.ResetFlag(FLAG_ZERO);
+		reg.ResetFlag(FLAG_NEGA);
+		reg.ResetFlag(FLAG_HACA);
+		reg.ResetFlag(FLAG_CARY);
+		reg.Set8(reg2, REG);
+		return NONE;
+	};
+	OpCode[SRL] = [&]()->int {
+		GB_BY REG = reg.Get8(reg2);
+		GB_BY by = 0x1 & REG;
+		REG >>= 1;
+		if (REG == 0)
+			reg.SetFlag(FLAG_ZERO);
+		else
+			reg.ResetFlag(FLAG_ZERO);
+		reg.ResetFlag(FLAG_NEGA);
+		reg.ResetFlag(FLAG_HACA);
+		if (by)
+			reg.SetFlag(FLAG_CARY);
+		else
+			reg.ResetFlag(FLAG_CARY);
+		reg.Set8(reg2, REG);
+		return NONE;
+	};
+	OpCode[BIT] = [&]()->int {
+		if ((~reg.Get8(reg2) & (1 << param)))reg.SetFlag(FLAG_ZERO); else reg.ResetFlag(FLAG_ZERO);
+		reg.ResetFlag(FLAG_NEGA);
+		reg.SetFlag(FLAG_HACA);
+		return NONE;
+	};
+	OpCode[RES] = [&]()->int {
+		reg.Set8(reg2, reg.Get8(reg2)&~(1 << param));
+		return NONE;
+	};
+	OpCode[SET] = [&]()->int {
+		reg.Set8(reg2, reg.Get8(reg2) | (1 << param));
+		return NONE;
+	};
+}
+void CPU::InterHandle(GB_BY IMEtype) {
+
+
+	
 	if (IMEtype & 0x01) {
 		_Memory.MemoryWrite(IF, _Memory.MemoryRead(IF)&(~0x1));
-		RST();
-		_REG.PC = 0x40;
+		reg.SetPC(0x40);
 	}//V-BLANK
 	else
 		if (IMEtype & 0x02) {
 			_Memory.MemoryWrite(IF, _Memory.MemoryRead(IF)&(~0x2));
-			RST();
-			_REG.PC = 0x48;
+			reg.SetPC(0x48);
 		}//LCDC (see STAT)
 		else
 			if (IMEtype & 0x04) {
 				_Memory.MemoryWrite(IF, _Memory.MemoryRead(IF)&(~0x4));
-				RST();
-				_REG.PC = 0x50;
+				reg.SetPC(0x50);
 			}//timer overflow
 			else
 				if (IMEtype & 0x08) {
 					_Memory.MemoryWrite(IF, _Memory.MemoryRead(IF)&(~0x8));
-					RST();
-					_REG.PC = 0x58;
+					reg.SetPC(0x58);
 				}//serial io transfer complete
 				else
 					if (IMEtype & 0x10) {
 						_Memory.MemoryWrite(IF, _Memory.MemoryRead(IF)&(~0x10));
-						RST();
-						_REG.PC = 0x60;
+						reg.SetPC(0x60);
 					}//transition from high to low of pin number p10-p13
-	
-}
-void Z80::InitOpCodeList() {//omg,what a mess!!! 2019/1/7
-	for (int i = 0; i < 0x100; i++) {
-		OpCode[i] = [&]()->int {return 0; };
-		CBOpCode[i] = [&]()->int {return 0; };
-	}
-	//LD nn,n put n into reg nn
-
-	OpCode[0x06] = [&]()->int {_REG.B = _Memory.MemoryRead(_REG.PC++); return 8; };
-	OpCode[0x0E] = [&]()->int {_REG.C = _Memory.MemoryRead(_REG.PC++); return 8; };
-	OpCode[0x16] = [&]()->int {_REG.D = _Memory.MemoryRead(_REG.PC++); return 8; };
-	OpCode[0x1E] = [&]()->int {_REG.E = _Memory.MemoryRead(_REG.PC++); return 8; };
-	OpCode[0x26] = [&]()->int {_REG.H = _Memory.MemoryRead(_REG.PC++); return 8; };
-	OpCode[0x2E] = [&]()->int {_REG.L = _Memory.MemoryRead(_REG.PC++); return 8; };
-
-	//LD r1,r2
-	//p66
-	OpCode[0x7F] = [&]()->int {_REG.A = _REG.A; return 4; };
-	OpCode[0x78] = [&]()->int {_REG.A = _REG.B; return 4; };
-	OpCode[0x79] = [&]()->int {_REG.A = _REG.C; return 4; };
-	OpCode[0x7A] = [&]()->int {_REG.A = _REG.D; return 4; };
-	OpCode[0x7B] = [&]()->int {_REG.A = _REG.E; return 4; };
-	OpCode[0x7C] = [&]()->int {_REG.A = _REG.H; return 4; };
-	OpCode[0x7D] = [&]()->int {_REG.A = _REG.L; return 4; };
-	OpCode[0x7E] = [&]()->int {_REG.A = _Memory.MemoryRead(_REG.H << 8 | _REG.L); return 8; };
-	OpCode[0x40] = [&]()->int {_REG.B = _REG.B; return 4; };
-	OpCode[0x41] = [&]()->int {_REG.B = _REG.C; return 4; };
-	OpCode[0x42] = [&]()->int {_REG.B = _REG.D; return 4; };
-	OpCode[0x43] = [&]()->int {_REG.B = _REG.E; return 4; };
-	OpCode[0x44] = [&]()->int {_REG.B = _REG.H; return 4; };
-	OpCode[0x45] = [&]()->int {_REG.B = _REG.L; return 4; };
-	OpCode[0x46] = [&]()->int {_REG.B = _Memory.MemoryRead(_REG.H << 8 | _REG.L); return 8; };
-	OpCode[0x48] = [&]()->int {_REG.C = _REG.B; return 4; };
-	OpCode[0x49] = [&]()->int {_REG.C = _REG.C; return 4; };
-	OpCode[0x4A] = [&]()->int {_REG.C = _REG.D; return 4; };
-	OpCode[0x4B] = [&]()->int {_REG.C = _REG.E; return 4; };
-	OpCode[0x4C] = [&]()->int {_REG.C = _REG.H; return 4; };
-	OpCode[0x4D] = [&]()->int {_REG.C = _REG.L; return 4; };
-	OpCode[0x4E] = [&]()->int {_REG.C = _Memory.MemoryRead(_REG.H << 8 | _REG.L); return 8; };
-	OpCode[0x50] = [&]()->int {_REG.D = _REG.B; return 4; };
-	OpCode[0x51] = [&]()->int {_REG.D = _REG.C; return 4; };
-	OpCode[0x52] = [&]()->int {_REG.D = _REG.D; return 4; };
-	OpCode[0x53] = [&]()->int {_REG.D = _REG.E; return 4; };
-	OpCode[0x54] = [&]()->int {_REG.D = _REG.H; return 4; };
-	OpCode[0x55] = [&]()->int {_REG.D = _REG.L; return 4; };
-	OpCode[0x56] = [&]()->int {_REG.D = _Memory.MemoryRead(_REG.H << 8 | _REG.L); return 8; };
-	OpCode[0x58] = [&]()->int {_REG.E = _REG.B; return 4; };
-	OpCode[0x59] = [&]()->int {_REG.E = _REG.C; return 4; };
-	OpCode[0x5A] = [&]()->int {_REG.E = _REG.D; return 4; };
-	OpCode[0x5B] = [&]()->int {_REG.E = _REG.E; return 4; };
-	OpCode[0x5C] = [&]()->int {_REG.E = _REG.H; return 4; };
-	OpCode[0x5D] = [&]()->int {_REG.E = _REG.L; return 4; };
-	OpCode[0x5E] = [&]()->int {_REG.E = _Memory.MemoryRead(_REG.H << 8 | _REG.L); return 8; };
-	OpCode[0x60] = [&]()->int {_REG.H = _REG.B; return 4; };
-	OpCode[0x61] = [&]()->int {_REG.H = _REG.C; return 4; };
-	OpCode[0x62] = [&]()->int {_REG.H = _REG.D; return 4; };
-	OpCode[0x63] = [&]()->int {_REG.H = _REG.E; return 4; };
-	OpCode[0x64] = [&]()->int {_REG.H = _REG.H; return 4; };
-	OpCode[0x65] = [&]()->int {_REG.H = _REG.L; return 4; };
-	OpCode[0x66] = [&]()->int {_REG.H = _Memory.MemoryRead(_REG.H << 8 | _REG.L); return 8; };
-	OpCode[0x68] = [&]()->int {_REG.L = _REG.B; return 4; };
-	OpCode[0x69] = [&]()->int {_REG.L = _REG.C; return 4; };
-	OpCode[0x6A] = [&]()->int {_REG.L = _REG.D; return 4; };
-	OpCode[0x6B] = [&]()->int {_REG.L = _REG.E; return 4; };
-	OpCode[0x6C] = [&]()->int {_REG.L = _REG.H; return 4; };
-	OpCode[0x6D] = [&]()->int {_REG.L = _REG.L; return 4; };
-	OpCode[0x6E] = [&]()->int {_REG.L = _Memory.MemoryRead(_REG.H << 8 | _REG.L); return 8; };
-	OpCode[0x70] = [&]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, _REG.B); return 8; };
-	OpCode[0x71] = [&]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, _REG.C); return 8; };
-	OpCode[0x72] = [&]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, _REG.D); return 8; };
-	OpCode[0x73] = [&]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, _REG.E); return 8; };
-	OpCode[0x74] = [&]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, _REG.H); return 8; };
-	OpCode[0x75] = [&]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, _REG.L); return 8; };
-	OpCode[0x36] = [&]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, _Memory.MemoryRead(_REG.PC++)); return 12; };
-
-	//LD A,n
-	//p67
-
-
-	OpCode[0x0A] = [&]()->int {_REG.A = _Memory.MemoryRead(_REG.B << 8 | _REG.C); return 8; };
-	OpCode[0x1A] = [&]()->int {_REG.A = _Memory.MemoryRead(_REG.D << 8 | _REG.E); return 8; };
-	//0x7E
-	OpCode[0xFA] = [&]()->int {_REG.A = _Memory.MemoryRead(_Memory.MemoryRead(_REG.PC++)|_Memory.MemoryRead(_REG.PC++)<<8); return 16; };
-	OpCode[0x3E] = [&]()->int {_REG.A = _Memory.MemoryRead(_REG.PC++); return 8; };
-
-	//LD n,A
-	//p69
-	OpCode[0x47] = [&]()->int {_REG.B = _REG.A; return 4; };
-	OpCode[0x4F] = [&]()->int {_REG.C = _REG.A; return 4; };
-	OpCode[0x57] = [&]()->int {_REG.D = _REG.A; return 4; };
-	OpCode[0x5F] = [&]()->int {_REG.E = _REG.A; return 4; };
-	OpCode[0x67] = [&]()->int {_REG.H = _REG.A; return 4; };
-	OpCode[0x6F] = [&]()->int {_REG.L = _REG.A; return 4; };
-	OpCode[0x02] = [&]()->int {_Memory.MemoryWrite(_REG.B << 8 | _REG.C, _REG.A); return 8; };
-	OpCode[0x12] = [&]()->int {_Memory.MemoryWrite(_REG.D << 8 | _REG.E, _REG.A); return 8; };
-	OpCode[0x77] = [&]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, _REG.A); return 8; };
-	OpCode[0xEA] = [&]()->int {_Memory.MemoryWrite(_Memory.MemoryRead(_REG.PC++) | _Memory.MemoryRead(_REG.PC++) << 8, _REG.A); return 16; };
-
-	//LD A,(C)
-	//p70
-	OpCode[0xF2] = [&]()->int {_REG.A = _Memory.MemoryRead(_REG.C + 0xFF00); return 8; };
-
-	//LD (C),A
-	OpCode[0xE2] = [&]()->int {_Memory.MemoryWrite(_REG.C + 0xFF00, _REG.A); return 8; };
-
-	//LDD A,(HL)(HL),A
-	//P71
-	OpCode[0x3A] = [&]()->int {_REG.A = _Memory.MemoryRead(_REG.H << 8 | _REG.L); if (_REG.L == 0) { _REG.H--; } _REG.L--; return 8; };
-	OpCode[0x32] = [&]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, _REG.A);  if (_REG.L == 0) { _REG.H--; }_REG.L--; return 8; };
-
-	//LDI A,(HL)(HL),A
-	//p72
-	OpCode[0x2A] = [&]()->int {_REG.A = _Memory.MemoryRead(_REG.H << 8 | _REG.L); if (_REG.L == 0xFF) { _REG.H++; } _REG.L++; return 8; };
-	OpCode[0x22] = [&]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, _REG.A);  if (_REG.L == 0xFF) { _REG.H++; }_REG.L++; return 8; };
-
-	//LDH (n),A
-	//p75
-	OpCode[0xE0] = [&]()->int {_Memory.MemoryWrite(0xFF00 + _Memory.MemoryRead(_REG.PC++), _REG.A); return 12; };
-	OpCode[0xF0] = [&]()->int { _REG.A = _Memory.MemoryRead(0xFF00 + _Memory.MemoryRead(_REG.PC++)); return 12; };
-
-	//LD n,nn
-	//p76
-	OpCode[0x01] = [&]()->int {_REG.C = _Memory.MemoryRead(_REG.PC++); _REG.B = _Memory.MemoryRead(_REG.PC++); return 12; };
-	OpCode[0x11] = [&]()->int {_REG.E = _Memory.MemoryRead(_REG.PC++); _REG.D = _Memory.MemoryRead(_REG.PC++); return 12; };
-	OpCode[0x21] = [&]()->int {_REG.L = _Memory.MemoryRead(_REG.PC++); _REG.H = _Memory.MemoryRead(_REG.PC++); return 12; };
-	OpCode[0x31] = [&]()->int {_REG.SP = _Memory.MemoryRead(_REG.PC++) | _Memory.MemoryRead(_REG.PC++) << 8; return 12; };
-
-	//LD SP,HL
-	OpCode[0xF9] = [&]()->int {_REG.SP = _REG.H << 8 | _REG.L; return 8; };
-	//LDHL SP,n
-	//p77
-	//flagf
-	OpCode[0xF8] = [&]()->int {LDHL(); return 12; };//address?
-	//LD (nn),SP
-	OpCode[0x08] = [&]()->int {GB_DB ads = _Memory.MemoryRead(_REG.PC) | _Memory.MemoryRead(_REG.PC + 1) << 8; _Memory.MemoryWrite(ads, _REG.SP & 0xFF); _Memory.MemoryWrite(ads+1, (_REG.SP & 0xFF00)>>8); _REG.PC += 2; return 20; };
-	//PUSH nn
-	OpCode[0xF5] = [&]()->int {_REG.SP -= 2; _Memory.MemoryWrite(_REG.SP, _REG.F); _Memory.MemoryWrite(_REG.SP+1, _REG.A); return 16; };
-	OpCode[0xC5] = [&]()->int {_REG.SP -= 2; _Memory.MemoryWrite(_REG.SP, _REG.C); _Memory.MemoryWrite(_REG.SP+1, _REG.B); return 16; };
-	OpCode[0xD5] = [&]()->int {_REG.SP -= 2; _Memory.MemoryWrite(_REG.SP, _REG.E); _Memory.MemoryWrite(_REG.SP+1, _REG.D); return 16; };
-	OpCode[0xE5] = [&]()->int {_REG.SP -= 2; _Memory.MemoryWrite(_REG.SP, _REG.L); _Memory.MemoryWrite(_REG.SP+1, _REG.H); return 16; };
-	//POP nn
-	OpCode[0xF1] = [&]()->int {_REG.A = _Memory.MemoryRead(_REG.SP+1); _REG.F = _Memory.MemoryRead(_REG.SP) & 0xF0; _REG.SP += 2; return 12; };
-	OpCode[0xC1] = [&]()->int {_REG.B = _Memory.MemoryRead(_REG.SP+1); _REG.C = _Memory.MemoryRead(_REG.SP); _REG.SP += 2; return 12; };
-	OpCode[0xD1] = [&]()->int {_REG.D = _Memory.MemoryRead(_REG.SP+1); _REG.E = _Memory.MemoryRead(_REG.SP); _REG.SP += 2; return 12; };
-	OpCode[0xE1] = [&]()->int {_REG.H = _Memory.MemoryRead(_REG.SP+1); _REG.L = _Memory.MemoryRead(_REG.SP); _REG.SP += 2; return 12; };//16bit bus?
-	//ADD A,n
-	//p80
-	//flagf
-	OpCode[0x87] = [&]()->int {ADD(_REG.A); return 4; };
-	OpCode[0x80] = [&]()->int {ADD(_REG.B); return 4; };
-	OpCode[0x81] = [&]()->int {ADD(_REG.C); return 4; };
-	OpCode[0x82] = [&]()->int {ADD(_REG.D); return 4; };
-	OpCode[0x83] = [&]()->int {ADD(_REG.E); return 4; };
-	OpCode[0x84] = [&]()->int {ADD(_REG.H); return 4; };
-	OpCode[0x85] = [&]()->int {ADD(_REG.L); return 4; };
-	OpCode[0x86] = [&]()->int {ADD(_Memory.MemoryRead(_REG.H << 8 | _REG.L)); return 8; };
-	OpCode[0xC6] = [&]()->int {ADD(_Memory.MemoryRead(_REG.PC++)); return 8; };
-
-	//ADC A,n
-	//p81
-	//flagf
-	OpCode[0x8F] = [&]()->int {ADC(_REG.A); return 4; };
-	OpCode[0x88] = [&]()->int {ADC(_REG.B); return 4; };
-	OpCode[0x89] = [&]()->int {ADC(_REG.C); return 4; };
-	OpCode[0x8A] = [&]()->int {ADC(_REG.D); return 4; };
-	OpCode[0x8B] = [&]()->int {ADC(_REG.E); return 4; };
-	OpCode[0x8C] = [&]()->int {ADC(_REG.H); return 4; };
-	OpCode[0x8D] = [&]()->int {ADC(_REG.L); return 4; };
-	OpCode[0x8E] = [&]()->int {ADC(_Memory.MemoryRead(_REG.H << 8 | _REG.L)); return 8; };
-	OpCode[0xCE] = [&]()->int {ADC(_Memory.MemoryRead(_REG.PC++)); return 8; };
-
-
-	//SUB A,n
-	//p82
-	//flagf
-	OpCode[0x97] = [&]()->int {SUB(_REG.A); return 4; };
-	OpCode[0x90] = [&]()->int {SUB(_REG.B); return 4; };
-	OpCode[0x91] = [&]()->int {SUB(_REG.C); return 4; };
-	OpCode[0x92] = [&]()->int {SUB(_REG.D); return 4; };
-	OpCode[0x93] = [&]()->int {SUB(_REG.E); return 4; };
-	OpCode[0x94] = [&]()->int {SUB(_REG.H); return 4; };
-	OpCode[0x95] = [&]()->int {SUB(_REG.L); return 4; };
-	OpCode[0x96] = [&]()->int {SUB(_Memory.MemoryRead(_REG.H << 8 | _REG.L)); return 8; };
-	OpCode[0xD6] = [&]()->int {SUB(_Memory.MemoryRead(_REG.PC++)); return 8; };
-
-	//SBC A,n
-	//p81
-	//flagf
-	OpCode[0x9F] = [&]()->int {SBC(_REG.A); return 4; };
-	OpCode[0x98] = [&]()->int {SBC(_REG.B); return 4; };
-	OpCode[0x99] = [&]()->int {SBC(_REG.C); return 4; };
-	OpCode[0x9A] = [&]()->int {SBC(_REG.D); return 4; };
-	OpCode[0x9B] = [&]()->int {SBC(_REG.E); return 4; };
-	OpCode[0x9C] = [&]()->int {SBC(_REG.H); return 4; };
-	OpCode[0x9D] = [&]()->int {SBC(_REG.L); return 4; };
-	OpCode[0x9E] = [&]()->int {SBC(_Memory.MemoryRead(_REG.H << 8 | _REG.L)); return 8; };
-	OpCode[0xDE] = [&]()->int {SBC(_Memory.MemoryRead(_REG.PC++)); return 8; };
-
-	//AND n
-	//p84
-	//flagf
-	OpCode[0xA7] = [&]()->int {AND(_REG.A); return 4; };
-	OpCode[0xA0] = [&]()->int {AND(_REG.B); return 4; };
-	OpCode[0xA1] = [&]()->int {AND(_REG.C); return 4; };
-	OpCode[0xA2] = [&]()->int {AND(_REG.D); return 4; };
-	OpCode[0xA3] = [&]()->int {AND(_REG.E); return 4; };
-	OpCode[0xA4] = [&]()->int {AND(_REG.H); return 4; };
-	OpCode[0xA5] = [&]()->int {AND(_REG.L); return 4; };
-	OpCode[0xA6] = [&]()->int {AND(_Memory.MemoryRead(_REG.H << 8 | _REG.L)); return 8; };
-	OpCode[0xE6] = [&]()->int {AND(_Memory.MemoryRead(_REG.PC++)); return 8; };
-	//OR n
-	//p85
-	//flagf
-	OpCode[0xB7] = [&]()->int {OR(_REG.A); return 4; };
-	OpCode[0xB0] = [&]()->int {OR(_REG.B); return 4; };
-	OpCode[0xB1] = [&]()->int {OR(_REG.C); return 4; };
-	OpCode[0xB2] = [&]()->int {OR(_REG.D); return 4; };
-	OpCode[0xB3] = [&]()->int {OR(_REG.E); return 4; };
-	OpCode[0xB4] = [&]()->int {OR(_REG.H); return 4; };
-	OpCode[0xB5] = [&]()->int {OR(_REG.L); return 4; };
-	OpCode[0xB6] = [&]()->int {OR(_Memory.MemoryRead(_REG.H << 8 | _REG.L)); return 8; };
-	OpCode[0xF6] = [&]()->int {OR(_Memory.MemoryRead(_REG.PC++)); return 8; };
-
-	//XOR n
-	//p86
-	//flagf
-	OpCode[0xAF] = [&]()->int {XOR(_REG.A); return 4; };
-	OpCode[0xA8] = [&]()->int {XOR(_REG.B); return 4; };
-	OpCode[0xA9] = [&]()->int {XOR(_REG.C); return 4; };
-	OpCode[0xAA] = [&]()->int {XOR(_REG.D); return 4; };
-	OpCode[0xAB] = [&]()->int {XOR(_REG.E); return 4; };
-	OpCode[0xAC] = [&]()->int {XOR(_REG.H); return 4; };
-	OpCode[0xAD] = [&]()->int {XOR(_REG.L); return 4; };
-	OpCode[0xAE] = [&]()->int {XOR(_Memory.MemoryRead(_REG.H << 8 | _REG.L)); return 8; };
-	OpCode[0xEE] = [&]()->int {XOR(_Memory.MemoryRead(_REG.PC++)); return 8; };//?
-
-	//CP n
-	//p87
-	//flagf
-	OpCode[0xBF] = [&]()->int {CP(_REG.A); return 4; };
-	OpCode[0xB8] = [&]()->int {CP(_REG.B); return 4; };
-	OpCode[0xB9] = [&]()->int {CP(_REG.C); return 4; };
-	OpCode[0xBA] = [&]()->int {CP(_REG.D); return 4; };
-	OpCode[0xBB] = [&]()->int {CP(_REG.E); return 4; };
-	OpCode[0xBC] = [&]()->int {CP(_REG.H); return 4; };
-	OpCode[0xBD] = [&]()->int {CP(_REG.L); return 4; };
-	OpCode[0xBE] = [&]()->int {CP(_Memory.MemoryRead(_REG.H << 8 | _REG.L)); return 8; };
-	OpCode[0xFE] = [&]()->int {CP(_Memory.MemoryRead(_REG.PC++)); return 8; };
-
-	//INC n
-	//p88
-	//flagf
-	OpCode[0x3C] = [&]()->int {INC(_REG.A); return 4; };
-	OpCode[0x04] = [&]()->int {INC(_REG.B); return 4; };
-	OpCode[0x0C] = [&]()->int {INC(_REG.C); return 4; };
-	OpCode[0x14] = [&]()->int {INC(_REG.D); return 4; };
-	OpCode[0x1C] = [&]()->int {INC(_REG.E); return 4; };
-	OpCode[0x24] = [&]()->int {INC(_REG.H); return 4; };
-	OpCode[0x2C] = [&]()->int {INC(_REG.L); return 4; };
-	OpCode[0x34] = [&]()->int {GB_BY T = _Memory.MemoryRead(_REG.H << 8 | _REG.L); INC(T); _Memory.MemoryWrite((_REG.H << 8 | _REG.L), T); return 12; };
-
-	//DEC n
-	//p89
-	//flagf
-	OpCode[0x3D] = [&]()->int {DEC(_REG.A); return 4; };
-	OpCode[0x05] = [&]()->int {DEC(_REG.B); return 4; };
-	OpCode[0x0D] = [&]()->int {DEC(_REG.C); return 4; };
-	OpCode[0x15] = [&]()->int {DEC(_REG.D); return 4; };
-	OpCode[0x1D] = [&]()->int {DEC(_REG.E); return 4; };
-	OpCode[0x25] = [&]()->int {DEC(_REG.H); return 4; };
-	OpCode[0x2D] = [&]()->int {DEC(_REG.L); return 4; };
-	OpCode[0x35] = [&]()->int {GB_BY T = _Memory.MemoryRead(_REG.H << 8 | _REG.L); DEC(T); _Memory.MemoryWrite((_REG.H << 8 | _REG.L), T); return 12; };
-
-	//ADD HL,n
-	//p90
-	//flag
-	OpCode[0x09] = [&]()->int {ADDHL(_REG.B,_REG.C); return 8; };
-	OpCode[0x19] = [&]()->int {ADDHL(_REG.D, _REG.E); return 8; };
-	OpCode[0x29] = [&]()->int {ADDHL(_REG.H, _REG.L); return 8; };
-	OpCode[0x39] = [&]()->int {ADDHL((_REG.SP&0xFF00)>>8, _REG.SP&0xFF); return 8; };
-
-	//ADD SP.n
-	//p91
-	//flag
-	//unfinished
-	//n should be signed......
-	OpCode[0xE8] = [&]()->int {
-		__int8 by = _Memory.MemoryRead(_REG.PC++);
-		int re = _REG.SP + by;
-		SetFlag(FLAG_HACA, (((_REG.SP & 0x0F) + (by & 0x0F)) & 0x10) != 0);
-		SetFlag(FLAG_CARY, (((_REG.SP & 0xFF) + (by & 0xFF)) & 0x100) != 0);
-		
-		SetFlag(FLAG_ZERO, 0);
-		SetFlag(FLAG_NEGA, 0);
-		_REG.SP = re&0xffff;
-		return 16;
-	};
-
-	  //INC nn
-	  //p92
-	OpCode[0x03] = [&]()->int {_REG.C++; if (_REG.C == 0)_REG.B++; return 8; };
-	OpCode[0x13] = [&]()->int {_REG.E++; if (_REG.E == 0)_REG.D++; return 8; };
-	OpCode[0x23] = [&]()->int {_REG.L++; if (_REG.L == 0)_REG.H++; return 8; };
-	OpCode[0x33] = [&]()->int {_REG.SP++; return 8; };
-
-	//DEC nn
-	//p93
-	OpCode[0x0B] = [&]()->int {_REG.C--; if (_REG.C == 0xFF)_REG.B--; return 8; };
-	OpCode[0x1B] = [&]()->int {_REG.E--; if (_REG.E == 0xFF)_REG.D--; return 8; };
-	OpCode[0x2B] = [&]()->int {_REG.L--; if (_REG.L == 0xFF)_REG.H--; return 8; };
-	OpCode[0x3B] = [&]()->int {_REG.SP--; return 8; };
-
-	//CB
-	OpCode[0xCB] = [&]()->int { return CBOpCode[_Memory.MemoryRead(_REG.PC++)]();};
-	//SWAP
-	//p94
-	//flagf
-	CBOpCode[0x37] = [&]()->int {SWAP(_REG.A); return 8; };
-	CBOpCode[0x30] = [&]()->int {SWAP(_REG.B); return 8; };
-	CBOpCode[0x31] = [&]()->int {SWAP(_REG.C); return 8; };
-	CBOpCode[0x32] = [&]()->int {SWAP(_REG.D); return 8; };
-	CBOpCode[0x33] = [&]()->int {SWAP(_REG.E); return 8; };
-	CBOpCode[0x34] = [&]()->int {SWAP(_REG.H); return 8; };
-	CBOpCode[0x35] = [&]()->int {SWAP(_REG.L); return 8; };
-	CBOpCode[0x36] = [&]()->int {GB_BY by = _Memory.MemoryRead(_REG.H << 8 | _REG.L); SWAP(by); _Memory.MemoryWrite(_REG.H << 8 | _REG.L, by); return 16; };
-
-	//DAA
-	//p95
-	//flagf
-	
-	OpCode[0x27] = [&]()->int {
-		GB_DB tmp = _REG.A;
-		if(GetFlag(FLAG_NEGA)){
-			if (GetFlag(FLAG_HACA)) {
-				tmp = (tmp-0x06)&0xff;
-			}
-			if (GetFlag(FLAG_CARY)) {
-				tmp = (tmp-0x60)&0xff;
-			}
-		}else{
-			if (GetFlag(FLAG_HACA) || (tmp & 0xf) > 9) {
-				tmp += 0x06;
-			}
-			if (GetFlag(FLAG_CARY) || tmp> 0x9f) {
-				tmp += 0x60;
-			}
-		}
-		SetFlag(FLAG_HACA,0);
-		if (tmp > 0xff) {
-			SetFlag(FLAG_CARY, 1);
-		}
-		tmp &= 0xff;
-		SetFlag(FLAG_ZERO, tmp==0);
-		_REG.A = tmp & 0xff;
-		return 4;
-	};
-	 
-	//CPL
-	//flagf
-	OpCode[0x2F] = [&]()->int {SetFlag(FLAG_NEGA, 1); SetFlag(FLAG_HACA, 1); _REG.A = ~_REG.A; return 4; };
-
-	//CCF
-	//flagf
-	OpCode[0x3F] = [&]()->int {SetFlag(FLAG_NEGA, 0); SetFlag(FLAG_HACA, 0); _REG.F^=0x10; return 4; };
-
-	//SCF
-	//flagf
-	OpCode[0x37] = [&]()->int {SetFlag(FLAG_NEGA, 0); SetFlag(FLAG_HACA, 0); SetFlag(FLAG_CARY, 1); return 4; };
-
-	//Nop
-	OpCode[0x00] = [&]()->int {return 4; };
-
-	//HALT
-	
-	OpCode[0x76] = [&]()->int {isPause = 1; return 4; };//for further ?
-
-	//STOP
-	
-	OpCode[0x10] = [&]()->int {isStop = 1; _REG.PC++; if ((_Memory.MemoryRead(0xFF4D) & 1))_Memory.MemoryWrite(0xFF4D, 0xFE); return 4; };//set cpu and lcd pause
-
-	 //DI,EI
-	 //p98
-	
-	OpCode[0xF3] = [&]()->int {_REG.IME = 0; return 4; };
-
-	OpCode[0xFB] = [&]()->int {_REG.IME = 1; return 4; };
-	//RLCA
-	//flagf
-	
-	OpCode[0x07] = [&]()->int {
-		GB_BY by = 0x80 & _REG.A;
-		_REG.A <<= 1;
-		_REG.A |= by >> 7;
-		SetFlag(FLAG_ZERO, 0);
-		SetFlag(FLAG_NEGA, 0);
-		SetFlag(FLAG_HACA, 0);
-		SetFlag(FLAG_CARY, by);
-		return 4;
-	};
-	//RLA
-	//flagf
-	OpCode[0x17] = [&]()->int {
-		GB_BY by = 0x80 & _REG.A;
-		_REG.A <<= 1;
-		_REG.A |= GetFlag(FLAG_CARY);
-		SetFlag(FLAG_ZERO, 0);
-		SetFlag(FLAG_NEGA, 0);
-		SetFlag(FLAG_HACA, 0);
-		SetFlag(FLAG_CARY, by);
-		return 4;
-	};
-	//RRCA
-	//flagf
-	OpCode[0x0F] = [&]()->int {
-		GB_BY by = 0x1 & _REG.A;
-		_REG.A >>= 1;
-		_REG.A |= by << 7;
-		SetFlag(FLAG_ZERO, 0);
-		SetFlag(FLAG_NEGA, 0);
-		SetFlag(FLAG_HACA, 0);
-		SetFlag(FLAG_CARY, by);
-		return 4;
-	};
-	//RRA
-	//flagf
-	OpCode[0x1F] = [&]()->int {
-		GB_BY by = 0x1 & _REG.A;
-		_REG.A >>= 1;
-		_REG.A |= (GetFlag(FLAG_CARY) << 7);
-		SetFlag(FLAG_ZERO, 0);
-		SetFlag(FLAG_NEGA, 0);
-		SetFlag(FLAG_HACA, 0);
-		SetFlag(FLAG_CARY, by & 0x1);
-		return 4;
-	};
-
-	//RLC
-	//p99
-	//flagf
-	CBOpCode[0x07] = [&]()->int {RLC(_REG.A); return 8; };
-	CBOpCode[0x00] = [&]()->int {RLC(_REG.B); return 8; };
-	CBOpCode[0x01] = [&]()->int {RLC(_REG.C); return 8; };
-	CBOpCode[0x02] = [&]()->int {RLC(_REG.D); return 8; };
-	CBOpCode[0x03] = [&]()->int {RLC(_REG.E); return 8; };
-	CBOpCode[0x04] = [&]()->int {RLC(_REG.H); return 8; };
-	CBOpCode[0x05] = [&]()->int {RLC(_REG.L); return 8; };
-	CBOpCode[0x06] = [&]()->int {GB_BY T = _Memory.MemoryRead(_REG.H << 8 | _REG.L); RLC(T); _Memory.MemoryWrite(_REG.H << 8 | _REG.L, T); return 16; };
-
-	//RL
-	//p99
-	//flagf
-	CBOpCode[0x17] = [&]()->int {RL(_REG.A); return 8; };
-	CBOpCode[0x10] = [&]()->int {RL(_REG.B); return 8; };
-	CBOpCode[0x11] = [&]()->int {RL(_REG.C); return 8; };
-	CBOpCode[0x12] = [&]()->int {RL(_REG.D); return 8; };
-	CBOpCode[0x13] = [&]()->int {RL(_REG.E); return 8; };
-	CBOpCode[0x14] = [&]()->int {RL(_REG.H); return 8; };
-	CBOpCode[0x15] = [&]()->int {RL(_REG.L); return 8; };
-	CBOpCode[0x16] = [&]()->int {GB_BY T = _Memory.MemoryRead(_REG.H << 8 | _REG.L); RL(T); _Memory.MemoryWrite(_REG.H << 8 | _REG.L, T); return 16; };
-
-	//RRC
-	//p103
-	//flagf
-	CBOpCode[0x0F] = [&]()->int {RRC(_REG.A); return 8; };
-	CBOpCode[0x08] = [&]()->int {RRC(_REG.B); return 8; };
-	CBOpCode[0x09] = [&]()->int {RRC(_REG.C); return 8; };
-	CBOpCode[0x0A] = [&]()->int {RRC(_REG.D); return 8; };
-	CBOpCode[0x0B] = [&]()->int {RRC(_REG.E); return 8; };
-	CBOpCode[0x0C] = [&]()->int {RRC(_REG.H); return 8; };
-	CBOpCode[0x0D] = [&]()->int {RRC(_REG.L); return 8; };
-	CBOpCode[0x0E] = [&]()->int {GB_BY T = _Memory.MemoryRead(_REG.H << 8 | _REG.L); RRC(T); _Memory.MemoryWrite(_REG.H << 8 | _REG.L, T); return 16; };
-
-	//RR
-	//p103
-	//flagf
-	CBOpCode[0x1F] = [&]()->int {RR(_REG.A); return 8; };
-	CBOpCode[0x18] = [&]()->int {RR(_REG.B); return 8; };
-	CBOpCode[0x19] = [&]()->int {RR(_REG.C); return 8; };
-	CBOpCode[0x1A] = [&]()->int {RR(_REG.D); return 8; };
-	CBOpCode[0x1B] = [&]()->int {RR(_REG.E); return 8; };
-	CBOpCode[0x1C] = [&]()->int {RR(_REG.H); return 8; };
-	CBOpCode[0x1D] = [&]()->int {RR(_REG.L); return 8; };
-	CBOpCode[0x1E] = [&]()->int {GB_BY T = _Memory.MemoryRead(_REG.H << 8 | _REG.L); RR(T); _Memory.MemoryWrite(_REG.H << 8 | _REG.L, T); return 16; };
-
-	//SLA
-	//p105
-	//flagf
-	CBOpCode[0x27] = [&]()->int {SLA(_REG.A); return 8; };
-	CBOpCode[0x20] = [&]()->int {SLA(_REG.B); return 8; };
-	CBOpCode[0x21] = [&]()->int {SLA(_REG.C); return 8; };
-	CBOpCode[0x22] = [&]()->int {SLA(_REG.D); return 8; };
-	CBOpCode[0x23] = [&]()->int {SLA(_REG.E); return 8; };
-	CBOpCode[0x24] = [&]()->int {SLA(_REG.H); return 8; };
-	CBOpCode[0x25] = [&]()->int {SLA(_REG.L); return 8; };
-	CBOpCode[0x26] = [&]()->int {GB_BY T = _Memory.MemoryRead(_REG.H << 8 | _REG.L); SLA(T); _Memory.MemoryWrite(_REG.H << 8 | _REG.L, T); return 16; };
-
-	//SRA
-	//p106
-	//flagf
-	CBOpCode[0x2F] = [&]()->int {SRA(_REG.A); return 8; };
-	CBOpCode[0x28] = [&]()->int {SRA(_REG.B); return 8; };
-	CBOpCode[0x29] = [&]()->int {SRA(_REG.C); return 8; };
-	CBOpCode[0x2A] = [&]()->int {SRA(_REG.D); return 8; };
-	CBOpCode[0x2B] = [&]()->int {SRA(_REG.E); return 8; };
-	CBOpCode[0x2C] = [&]()->int {SRA(_REG.H); return 8; };
-	CBOpCode[0x2D] = [&]()->int {SRA(_REG.L); return 8; };
-	CBOpCode[0x2E] = [&]()->int {GB_BY T = _Memory.MemoryRead(_REG.H << 8 | _REG.L); SRA(T); _Memory.MemoryWrite(_REG.H << 8 | _REG.L, T); return 16; };
-
-	//SRL
-	//p107
-	//flagf
-	CBOpCode[0x3F] = [&]()->int {SRL(_REG.A); return 8; };
-	CBOpCode[0x38] = [&]()->int {SRL(_REG.B); return 8; };
-	CBOpCode[0x39] = [&]()->int {SRL(_REG.C); return 8; };
-	CBOpCode[0x3A] = [&]()->int {SRL(_REG.D); return 8; };
-	CBOpCode[0x3B] = [&]()->int {SRL(_REG.E); return 8; };
-	CBOpCode[0x3C] = [&]()->int {SRL(_REG.H); return 8; };
-	CBOpCode[0x3D] = [&]()->int {SRL(_REG.L); return 8; };
-	CBOpCode[0x3E] = [&]()->int {GB_BY T = _Memory.MemoryRead(_REG.H << 8 | _REG.L); SRL(T); _Memory.MemoryWrite(_REG.H << 8 | _REG.L, T); return 16; };
-
-	//BIT
-	//P108
-	//flagf
-	CBOpCode[0x47] = [&]()->int {BIT(_REG.A, 0); return 8; };
-	CBOpCode[0x40] = [&]()->int {BIT(_REG.B, 0); return 8; };
-	CBOpCode[0x41] = [&]()->int {BIT(_REG.C, 0); return 8; };
-	CBOpCode[0x42] = [&]()->int {BIT(_REG.D, 0); return 8; };
-	CBOpCode[0x43] = [&]()->int {BIT(_REG.E, 0); return 8; };
-	CBOpCode[0x44] = [&]()->int {BIT(_REG.H, 0); return 8; };
-	CBOpCode[0x45] = [&]()->int {BIT(_REG.L, 0); return 8; };
-	CBOpCode[0x46] = [&]()->int {GB_BY T = _Memory.MemoryRead(_REG.H << 8 | _REG.L); BIT(T, 0); return 12; };
-
-	CBOpCode[0x4F] = [&]()->int {BIT(_REG.A, 1); return 8; };
-	CBOpCode[0x48] = [&]()->int {BIT(_REG.B, 1); return 8; };
-	CBOpCode[0x49] = [&]()->int {BIT(_REG.C, 1); return 8; };
-	CBOpCode[0x4A] = [&]()->int {BIT(_REG.D, 1); return 8; };
-	CBOpCode[0x4B] = [&]()->int {BIT(_REG.E, 1); return 8; };
-	CBOpCode[0x4C] = [&]()->int {BIT(_REG.H, 1); return 8; };
-	CBOpCode[0x4D] = [&]()->int {BIT(_REG.L, 1); return 8; };
-	CBOpCode[0x4E] = [&]()->int {GB_BY T = _Memory.MemoryRead(_REG.H << 8 | _REG.L); BIT(T, 1); return 12; };
-
-	CBOpCode[0x57] = [&]()->int {BIT(_REG.A, 2); return 8; };
-	CBOpCode[0x50] = [&]()->int {BIT(_REG.B, 2); return 8; };
-	CBOpCode[0x51] = [&]()->int {BIT(_REG.C, 2); return 8; };
-	CBOpCode[0x52] = [&]()->int {BIT(_REG.D, 2); return 8; };
-	CBOpCode[0x53] = [&]()->int {BIT(_REG.E, 2); return 8; };
-	CBOpCode[0x54] = [&]()->int {BIT(_REG.H, 2); return 8; };
-	CBOpCode[0x55] = [&]()->int {BIT(_REG.L, 2); return 8; };
-	CBOpCode[0x56] = [&]()->int {GB_BY T = _Memory.MemoryRead(_REG.H << 8 | _REG.L); BIT(T, 2); return 12; };
-
-	CBOpCode[0x5F] = [&]()->int {BIT(_REG.A, 3); return 8; };
-	CBOpCode[0x58] = [&]()->int {BIT(_REG.B, 3); return 8; };
-	CBOpCode[0x59] = [&]()->int {BIT(_REG.C, 3); return 8; };
-	CBOpCode[0x5A] = [&]()->int {BIT(_REG.D, 3); return 8; };
-	CBOpCode[0x5B] = [&]()->int {BIT(_REG.E, 3); return 8; };
-	CBOpCode[0x5C] = [&]()->int {BIT(_REG.H, 3); return 8; };
-	CBOpCode[0x5D] = [&]()->int {BIT(_REG.L, 3); return 8; };
-	CBOpCode[0x5E] = [&]()->int {GB_BY T = _Memory.MemoryRead(_REG.H << 8 | _REG.L); BIT(T, 3); return 12; };
-
-	CBOpCode[0x67] = [&]()->int {BIT(_REG.A, 4); return 8; };
-	CBOpCode[0x60] = [&]()->int {BIT(_REG.B, 4); return 8; };
-	CBOpCode[0x61] = [&]()->int {BIT(_REG.C, 4); return 8; };
-	CBOpCode[0x62] = [&]()->int {BIT(_REG.D, 4); return 8; };
-	CBOpCode[0x63] = [&]()->int {BIT(_REG.E, 4); return 8; };
-	CBOpCode[0x64] = [&]()->int {BIT(_REG.H, 4); return 8; };
-	CBOpCode[0x65] = [&]()->int {BIT(_REG.L, 4); return 8; };
-	CBOpCode[0x66] = [&]()->int {GB_BY T = _Memory.MemoryRead(_REG.H << 8 | _REG.L); BIT(T, 4); return 12; };
-
-	CBOpCode[0x6F] = [&]()->int {BIT(_REG.A, 5); return 8; };
-	CBOpCode[0x68] = [&]()->int {BIT(_REG.B, 5); return 8; };
-	CBOpCode[0x69] = [&]()->int {BIT(_REG.C, 5); return 8; };
-	CBOpCode[0x6A] = [&]()->int {BIT(_REG.D, 5); return 8; };
-	CBOpCode[0x6B] = [&]()->int {BIT(_REG.E, 5); return 8; };
-	CBOpCode[0x6C] = [&]()->int {BIT(_REG.H, 5); return 8; };
-	CBOpCode[0x6D] = [&]()->int {BIT(_REG.L, 5); return 8; };
-	CBOpCode[0x6E] = [&]()->int {GB_BY T = _Memory.MemoryRead(_REG.H << 8 | _REG.L); BIT(T, 5); return 12; };
-
-	CBOpCode[0x77] = [&]()->int {BIT(_REG.A, 6); return 8; };
-	CBOpCode[0x70] = [&]()->int {BIT(_REG.B, 6); return 8; };
-	CBOpCode[0x71] = [&]()->int {BIT(_REG.C, 6); return 8; };
-	CBOpCode[0x72] = [&]()->int {BIT(_REG.D, 6); return 8; };
-	CBOpCode[0x73] = [&]()->int {BIT(_REG.E, 6); return 8; };
-	CBOpCode[0x74] = [&]()->int {BIT(_REG.H, 6); return 8; };
-	CBOpCode[0x75] = [&]()->int {BIT(_REG.L, 6); return 8; };
-	CBOpCode[0x76] = [&]()->int {GB_BY T = _Memory.MemoryRead(_REG.H << 8 | _REG.L); BIT(T, 6); return 12; };
-
-	CBOpCode[0x7F] = [&]()->int {BIT(_REG.A, 7); return 8; };
-	CBOpCode[0x78] = [&]()->int {BIT(_REG.B, 7); return 8; };
-	CBOpCode[0x79] = [&]()->int {BIT(_REG.C, 7); return 8; };
-	CBOpCode[0x7A] = [&]()->int {BIT(_REG.D, 7); return 8; };
-	CBOpCode[0x7B] = [&]()->int {BIT(_REG.E, 7); return 8; };
-	CBOpCode[0x7C] = [&]()->int {BIT(_REG.H, 7); return 8; };
-	CBOpCode[0x7D] = [&]()->int {BIT(_REG.L, 7); return 8; };
-	CBOpCode[0x7E] = [&]()->int {GB_BY T = _Memory.MemoryRead(_REG.H << 8 | _REG.L); BIT(T, 7); return 12; };
-
-	//SET
-	//P109
-
-	CBOpCode[0xC7] = [&]()->int {_REG.A |=  ( 1 << 0); return 8; };
-	CBOpCode[0xC0] = [&]()->int {_REG.B |=  ( 1 << 0); return 8; };
-	CBOpCode[0xC1] = [&]()->int {_REG.C |=  ( 1 << 0); return 8; };
-	CBOpCode[0xC2] = [&]()->int {_REG.D |=  ( 1 << 0); return 8; };
-	CBOpCode[0xC3] = [&]()->int {_REG.E |=  ( 1 << 0); return 8; };
-	CBOpCode[0xC4] = [&]()->int {_REG.H |=  ( 1 << 0); return 8; };
-	CBOpCode[0xC5] = [&]()->int {_REG.L |=  ( 1 << 0); return 8; };
-	CBOpCode[0xC6] = [&]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, (_Memory.MemoryRead(_REG.H << 8 | _REG.L) |  ( 1 << 0))); return 16; };
-
-	CBOpCode[0xCF] = [&]()->int {_REG.A |=  ( 1 << 1); return 8; };
-	CBOpCode[0xC8] = [&]()->int {_REG.B |=  ( 1 << 1); return 8; };
-	CBOpCode[0xC9] = [&]()->int {_REG.C |=  ( 1 << 1); return 8; };
-	CBOpCode[0xCA] = [&]()->int {_REG.D |=  ( 1 << 1); return 8; };
-	CBOpCode[0xCB] = [&]()->int {_REG.E |=  ( 1 << 1); return 8; };
-	CBOpCode[0xCC] = [&]()->int {_REG.H |=  ( 1 << 1); return 8; };
-	CBOpCode[0xCD] = [&]()->int {_REG.L |=  ( 1 << 1); return 8; };
-	CBOpCode[0xCE] = [&]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, (_Memory.MemoryRead(_REG.H << 8 | _REG.L) |  ( 1 << 1))); return 16; };
-
-	CBOpCode[0xD7] = [&]()->int {_REG.A |=  ( 1 << 2); return 8; };
-	CBOpCode[0xD0] = [&]()->int {_REG.B |=  ( 1 << 2); return 8; };
-	CBOpCode[0xD1] = [&]()->int {_REG.C |=  ( 1 << 2); return 8; };
-	CBOpCode[0xD2] = [&]()->int {_REG.D |=  ( 1 << 2); return 8; };
-	CBOpCode[0xD3] = [&]()->int {_REG.E |=  ( 1 << 2); return 8; };
-	CBOpCode[0xD4] = [&]()->int {_REG.H |=  ( 1 << 2); return 8; };
-	CBOpCode[0xD5] = [&]()->int {_REG.L |=  ( 1 << 2); return 8; };
-	CBOpCode[0xD6] = [&]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, (_Memory.MemoryRead(_REG.H << 8 | _REG.L) |  ( 1 << 2))); return 16; };
-
-	CBOpCode[0xDF] = [&]()->int {_REG.A |=  ( 1 << 3); return 8; };
-	CBOpCode[0xD8] = [&]()->int {_REG.B |=  ( 1 << 3); return 8; };
-	CBOpCode[0xD9] = [&]()->int {_REG.C |=  ( 1 << 3); return 8; };
-	CBOpCode[0xDA] = [&]()->int {_REG.D |=  ( 1 << 3); return 8; };
-	CBOpCode[0xDB] = [&]()->int {_REG.E |=  ( 1 << 3); return 8; };
-	CBOpCode[0xDC] = [&]()->int {_REG.H |=  ( 1 << 3); return 8; };
-	CBOpCode[0xDD] = [&]()->int {_REG.L |=  ( 1 << 3); return 8; };
-	CBOpCode[0xDE] = [&]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, (_Memory.MemoryRead(_REG.H << 8 | _REG.L) |  ( 1 << 3))); return 16; };
-
-	CBOpCode[0xE7] = [&]()->int {_REG.A |=  ( 1 << 4); return 8; };
-	CBOpCode[0xE0] = [&]()->int {_REG.B |=  ( 1 << 4); return 8; };
-	CBOpCode[0xE1] = [&]()->int {_REG.C |=  ( 1 << 4); return 8; };
-	CBOpCode[0xE2] = [&]()->int {_REG.D |=  ( 1 << 4); return 8; };
-	CBOpCode[0xE3] = [&]()->int {_REG.E |=  ( 1 << 4); return 8; };
-	CBOpCode[0xE4] = [&]()->int {_REG.H |=  ( 1 << 4); return 8; };
-	CBOpCode[0xE5] = [&]()->int {_REG.L |=  ( 1 << 4); return 8; };
-	CBOpCode[0xE6] = [&]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, (_Memory.MemoryRead(_REG.H << 8 | _REG.L) |  ( 1 << 4))); return 16; };
-
-	CBOpCode[0xEF] = [&]()->int {_REG.A |=  ( 1 << 5); return 8; };
-	CBOpCode[0xE8] = [&]()->int {_REG.B |=  ( 1 << 5); return 8; };
-	CBOpCode[0xE9] = [&]()->int {_REG.C |=  ( 1 << 5); return 8; };
-	CBOpCode[0xEA] = [&]()->int {_REG.D |=  ( 1 << 5); return 8; };
-	CBOpCode[0xEB] = [&]()->int {_REG.E |=  ( 1 << 5); return 8; };
-	CBOpCode[0xEC] = [&]()->int {_REG.H |=  ( 1 << 5); return 8; };
-	CBOpCode[0xED] = [&]()->int {_REG.L |=  ( 1 << 5); return 8; };
-	CBOpCode[0xEE] = [&]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, (_Memory.MemoryRead(_REG.H << 8 | _REG.L) |  ( 1 << 5))); return 16; };
-
-	CBOpCode[0xF7] = [&]()->int {_REG.A |=  ( 1 << 6); return 8; };
-	CBOpCode[0xF0] = [&]()->int {_REG.B |=  ( 1 << 6); return 8; };
-	CBOpCode[0xF1] = [&]()->int {_REG.C |=  ( 1 << 6); return 8; };
-	CBOpCode[0xF2] = [&]()->int {_REG.D |=  ( 1 << 6); return 8; };
-	CBOpCode[0xF3] = [&]()->int {_REG.E |=  ( 1 << 6); return 8; };
-	CBOpCode[0xF4] = [&]()->int {_REG.H |=  ( 1 << 6); return 8; };
-	CBOpCode[0xF5] = [&]()->int {_REG.L |=  ( 1 << 6); return 8; };
-	CBOpCode[0xF6] = [&]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, (_Memory.MemoryRead(_REG.H << 8 | _REG.L) |  ( 1 << 6))); return 16; };
-
-	CBOpCode[0xFF] = [&]()->int {_REG.A |=  ( 1 << 7); return 8; };
-	CBOpCode[0xF8] = [&]()->int {_REG.B |=  ( 1 << 7); return 8; };
-	CBOpCode[0xF9] = [&]()->int {_REG.C |=  ( 1 << 7); return 8; };
-	CBOpCode[0xFA] = [&]()->int {_REG.D |=  ( 1 << 7); return 8; };
-	CBOpCode[0xFB] = [&]()->int {_REG.E |=  ( 1 << 7); return 8; };
-	CBOpCode[0xFC] = [&]()->int {_REG.H |=  ( 1 << 7); return 8; };
-	CBOpCode[0xFD] = [&]()->int {_REG.L |=  ( 1 << 7); return 8; };
-	CBOpCode[0xFE] = [&]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, (_Memory.MemoryRead(_REG.H << 8 | _REG.L) |  ( 1 << 7))); return 16; };
-
-	//RES
-	//P110
-
-	CBOpCode[0x87] = [&]()->int {_REG.A &= ~( 1 << 0); return 8; };
-	CBOpCode[0x80] = [&]()->int {_REG.B &= ~( 1 << 0); return 8; };
-	CBOpCode[0x81] = [&]()->int {_REG.C &= ~( 1 << 0); return 8; };
-	CBOpCode[0x82] = [&]()->int {_REG.D &= ~( 1 << 0); return 8; };
-	CBOpCode[0x83] = [&]()->int {_REG.E &= ~( 1 << 0); return 8; };
-	CBOpCode[0x84] = [&]()->int {_REG.H &= ~( 1 << 0); return 8; };
-	CBOpCode[0x85] = [&]()->int {_REG.L &= ~( 1 << 0); return 8; };
-	CBOpCode[0x86] = [&]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, (_Memory.MemoryRead(_REG.H << 8 | _REG.L) & ~( 1 <<0))); return 16; };
-
-	CBOpCode[0x8F] = [&]()->int {_REG.A &= ~( 1 << 1); return 8; };
-	CBOpCode[0x88] = [&]()->int {_REG.B &= ~( 1 << 1); return 8; };
-	CBOpCode[0x89] = [&]()->int {_REG.C &= ~( 1 << 1); return 8; };
-	CBOpCode[0x8A] = [&]()->int {_REG.D &= ~( 1 << 1); return 8; };
-	CBOpCode[0x8B] = [&]()->int {_REG.E &= ~( 1 << 1); return 8; };
-	CBOpCode[0x8C] = [&]()->int {_REG.H &= ~( 1 << 1); return 8; };
-	CBOpCode[0x8D] = [&]()->int {_REG.L &= ~( 1 << 1); return 8; };
-	CBOpCode[0x8E] = [&]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, (_Memory.MemoryRead(_REG.H << 8 | _REG.L) & ~( 1 << 1))); return 16; };
-
-	CBOpCode[0x97] = [&]()->int {_REG.A &= ~( 1 << 2); return 8; };
-	CBOpCode[0x90] = [&]()->int {_REG.B &= ~( 1 << 2); return 8; };
-	CBOpCode[0x91] = [&]()->int {_REG.C &= ~( 1 << 2); return 8; };
-	CBOpCode[0x92] = [&]()->int {_REG.D &= ~( 1 << 2); return 8; };
-	CBOpCode[0x93] = [&]()->int {_REG.E &= ~( 1 << 2); return 8; };
-	CBOpCode[0x94] = [&]()->int {_REG.H &= ~( 1 << 2); return 8; };
-	CBOpCode[0x95] = [&]()->int {_REG.L &= ~( 1 << 2); return 8; };
-	CBOpCode[0x96] = [&]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, (_Memory.MemoryRead(_REG.H << 8 | _REG.L) & ~( 1 << 2))); return 16; };
-
-	CBOpCode[0x9F] = [&]()->int {_REG.A &= ~( 1 << 3); return 8; };
-	CBOpCode[0x98] = [&]()->int {_REG.B &= ~( 1 << 3); return 8; };
-	CBOpCode[0x99] = [&]()->int {_REG.C &= ~( 1 << 3); return 8; };
-	CBOpCode[0x9A] = [&]()->int {_REG.D &= ~( 1 << 3); return 8; };
-	CBOpCode[0x9B] = [&]()->int {_REG.E &= ~( 1 << 3); return 8; };
-	CBOpCode[0x9C] = [&]()->int {_REG.H &= ~( 1 << 3); return 8; };
-	CBOpCode[0x9D] = [&]()->int {_REG.L &= ~( 1 << 3); return 8; };
-	CBOpCode[0x9E] = [&]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, (_Memory.MemoryRead(_REG.H << 8 | _REG.L) & ~( 1 << 3))); return 16; };
-
-	CBOpCode[0xA7] = [&]()->int {_REG.A &= ~( 1 << 4); return 8; };
-	CBOpCode[0xA0] = [&]()->int {_REG.B &= ~( 1 << 4); return 8; };
-	CBOpCode[0xA1] = [&]()->int {_REG.C &= ~( 1 << 4); return 8; };
-	CBOpCode[0xA2] = [&]()->int {_REG.D &= ~( 1 << 4); return 8; };
-	CBOpCode[0xA3] = [&]()->int {_REG.E &= ~( 1 << 4); return 8; };
-	CBOpCode[0xA4] = [&]()->int {_REG.H &= ~( 1 << 4); return 8; };
-	CBOpCode[0xA5] = [&]()->int {_REG.L &= ~( 1 << 4); return 8; };
-	CBOpCode[0xA6] = [&]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, (_Memory.MemoryRead(_REG.H << 8 | _REG.L) & ~( 1 << 4))); return 16; };
-
-	CBOpCode[0xAF] = [&]()->int {_REG.A &= ~( 1 << 5); return 8; };
-	CBOpCode[0xA8] = [&]()->int {_REG.B &= ~( 1 << 5); return 8; };
-	CBOpCode[0xA9] = [&]()->int {_REG.C &= ~( 1 << 5); return 8; };
-	CBOpCode[0xAA] = [&]()->int {_REG.D &= ~( 1 << 5); return 8; };
-	CBOpCode[0xAB] = [&]()->int {_REG.E &= ~( 1 << 5); return 8; };
-	CBOpCode[0xAC] = [&]()->int {_REG.H &= ~( 1 << 5); return 8; };
-	CBOpCode[0xAD] = [&]()->int {_REG.L &= ~( 1 << 5); return 8; };
-	CBOpCode[0xAE] = [&]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, (_Memory.MemoryRead(_REG.H << 8 | _REG.L) & ~( 1 << 5))); return 16; };
-
-	CBOpCode[0xB7] = [&]()->int {_REG.A &= ~( 1 << 6); return 8; };
-	CBOpCode[0xB0] = [&]()->int {_REG.B &= ~( 1 << 6); return 8; };
-	CBOpCode[0xB1] = [&]()->int {_REG.C &= ~( 1 << 6); return 8; };
-	CBOpCode[0xB2] = [&]()->int {_REG.D &= ~( 1 << 6); return 8; };
-	CBOpCode[0xB3] = [&]()->int {_REG.E &= ~( 1 << 6); return 8; };
-	CBOpCode[0xB4] = [&]()->int {_REG.H &= ~( 1 << 6); return 8; };
-	CBOpCode[0xB5] = [&]()->int {_REG.L &= ~( 1 << 6); return 8; };
-	CBOpCode[0xB6] = [&]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, (_Memory.MemoryRead(_REG.H << 8 | _REG.L) & ~( 1 << 6))); return 16; };
-
-	CBOpCode[0xBF] = [&]()->int {_REG.A &= ~( 1 << 7); return 8; };
-	CBOpCode[0xB8] = [&]()->int {_REG.B &= ~( 1 << 7); return 8; };
-	CBOpCode[0xB9] = [&]()->int {_REG.C &= ~( 1 << 7); return 8; };
-	CBOpCode[0xBA] = [&]()->int {_REG.D &= ~( 1 << 7); return 8; };
-	CBOpCode[0xBB] = [&]()->int {_REG.E &= ~( 1 << 7); return 8; };
-	CBOpCode[0xBC] = [&]()->int {_REG.H &= ~( 1 << 7); return 8; };
-	CBOpCode[0xBD] = [&]()->int {_REG.L &= ~( 1 << 7); return 8; };
-	CBOpCode[0xBE] = [&]()->int {_Memory.MemoryWrite(_REG.H << 8 | _REG.L, (_Memory.MemoryRead(_REG.H << 8 | _REG.L) & ~( 1 << 7))); return 16; };
-
-	//JP
-	//p111
-	OpCode[0xC3] = [&]()->int {JP(); return 16; };
-	//JP nz
-	OpCode[0xC2] = [&]()->int {if (!GetFlag(FLAG_ZERO)) { JP(); return 16; }_REG.PC += 2; return 12; };
-	//JP z
-	OpCode[0xCA] = [&]()->int {if (GetFlag(FLAG_ZERO)) { JP(); return 16; }_REG.PC += 2; return 12; };
-	//JP nc
-	OpCode[0xD2] = [&]()->int {if (!GetFlag(FLAG_CARY)) { JP(); return 16; }_REG.PC += 2; return 12; };
-	//JP c
-	OpCode[0xDA] = [&]()->int {if (GetFlag(FLAG_CARY)) { JP(); return 16; }_REG.PC += 2; return 12; };
-	//JP hl
-	OpCode[0xE9] = [&]()->int {_REG.PC = _REG.H << 8 | _REG.L; return 4; };
-	//JR n (signed!)
-	OpCode[0x18] = [&]()->int {_REG.PC += (__int8)_Memory.MemoryRead(_REG.PC); _REG.PC++; return 12; };
-	//JR nz(signed!)
-	OpCode[0x20] = [&]()->int {__int8 i = _Memory.MemoryRead(_REG.PC); _REG.PC++; if (!GetFlag(FLAG_ZERO)) { _REG.PC += (__int8)i; return 12; }return 8; };
-	//JR z(signed!)
-	OpCode[0x28] = [&]()->int {__int8 i = _Memory.MemoryRead(_REG.PC); _REG.PC++; if (GetFlag(FLAG_ZERO)) { _REG.PC += (__int8)i; return 12; }return 8; };
-	//JR nc(signed!)
-	OpCode[0x30] = [&]()->int {__int8 i = _Memory.MemoryRead(_REG.PC); _REG.PC++; if (!GetFlag(FLAG_CARY)) { _REG.PC += (__int8)i; return 12; }return 8; };
-	//JR c(signed!)
-	OpCode[0x38] = [&]()->int {__int8 i = _Memory.MemoryRead(_REG.PC); _REG.PC++; if (GetFlag(FLAG_CARY)) { _REG.PC += (__int8)i; return 12; }return 8; };
-
-	//CALL 
-	OpCode[0xCD] = [&]()->int {CALL();  return 24; };
-	//CALL nz 
-	OpCode[0xC4] = [&]()->int {if (!GetFlag(FLAG_ZERO)) { CALL(); return 24; }_REG.PC += 2; return 12; };
-	//CALL z
-	OpCode[0xCC] = [&]()->int {if (GetFlag(FLAG_ZERO)) { CALL();  return 24; }_REG.PC += 2; return 12; };
-	//CALL nc
-	OpCode[0xD4] = [&]()->int {if (!GetFlag(FLAG_CARY)) { CALL(); return 24; }_REG.PC += 2; return 12; };
-	//CALL c
-	OpCode[0xDC] = [&]()->int {if (GetFlag(FLAG_CARY)) { CALL(); return 24; }_REG.PC += 2; return 12; };
-
-	//RST n
-	//p116
-	OpCode[0xC7] = [&]()->int {RST(); _REG.PC = 0; return 16; };
-	OpCode[0xCF] = [&]()->int {RST(); _REG.PC = 0x8; return 16; };
-	OpCode[0xD7] = [&]()->int {RST(); _REG.PC = 0x10; return 16; };
-	OpCode[0xDF] = [&]()->int {RST(); _REG.PC = 0x18; return 16; };
-	OpCode[0xE7] = [&]()->int {RST(); _REG.PC = 0x20; return 16; };
-	OpCode[0xEF] = [&]()->int {RST(); _REG.PC = 0x28; return 16; };
-	OpCode[0xF7] = [&]()->int {RST(); _REG.PC = 0x30; return 16; };
-	OpCode[0xFF] = [&]()->int {RST(); _REG.PC = 0x38; return 16; };
-	//RET
-	//p117
-	OpCode[0xC9] = [&]()->int {_REG.PC = _Memory.MemoryRead(_REG.SP) | (_Memory.MemoryRead(_REG.SP+1) << 8); _REG.SP += 2; return 16; };
-	//RET cc
-	OpCode[0xC0] = [&]()->int {if (!GetFlag(FLAG_ZERO)) { return OpCode[0xC9]()+4; }return 8; };
-	OpCode[0xC8] = [&]()->int {if (GetFlag(FLAG_ZERO)) { return OpCode[0xC9]()+4; }return 8; };
-	OpCode[0xD0] = [&]()->int {if (!GetFlag(FLAG_CARY)) { return OpCode[0xC9]()+4; }return 8; };
-	OpCode[0xD8] = [&]()->int {if (GetFlag(FLAG_CARY)) { return OpCode[0xC9]()+4; }return 8; };
-	//RETI
-	OpCode[0xD9] = [&]()->int {OpCode[0xC9](); _REG.IME = 1; return 16; };
-	
-	
-	OpCode[0xD3] = [&]()->int {SetFlag(FLAG_ZERO, 1); return 0; };
-	OpCode[0xED] = [&]()->int {_Memory._inbios = 0; _REG.PC--; return 0; };
-	//no such Opcode,but make my work easy,yay.
-}
-
-void Z80::LDHL() {
-	SetFlag(FLAG_ZERO, 0);
-	SetFlag(FLAG_NEGA, 0);
-	
-	__int8 byte = _Memory.MemoryRead(_REG.PC++);
-	int re = _REG.SP+byte;
-	SetFlag(FLAG_HACA, (((_REG.SP & 0x0F) + (byte & 0x0F)) & 0x10) != 0);
-	SetFlag(FLAG_CARY, (((_REG.SP & 0xFF) + (byte & 0xFF)) & 0x100) != 0);
-	
-	_REG.L = re & 0xFF;
-	_REG.H = (re >> 8) & 0xFF;
-}
-
-void Z80::ADD(GB_BY REG) {
-	SetFlag(FLAG_NEGA, 0);
-	GB_DB re = _REG.A + REG;
-	SetFlag(FLAG_ZERO, (re & 0xff) == 0);
-	SetFlag(FLAG_HACA, ((_REG.A & 0x0F) + (REG & 0x0F)) & 0x10);
-	SetFlag(FLAG_CARY, re>0xff);
-	_REG.A = re & 0xFF;
-
-}
-void Z80::ADDHL(GB_BY REGH,GB_BY REGL) {
-	GB_DB hl = (_REG.H << 8) + _REG.L;
-	GB_DB db = (REGH << 8) + REGL;
-	uint32_t re = hl + db;
-	SetFlag(FLAG_NEGA, 0);
-	SetFlag(FLAG_HACA, ((hl & 0x0fff) + (db & 0x0fff)) > 0x0fff);
-	SetFlag(FLAG_CARY, re> 0xffff);
-	_REG.H = (re & 0xFF00)>>8;
-	_REG.L = re & 0xFF;
-}
-void Z80::ADC(GB_BY REG) {
-	SetFlag(FLAG_NEGA, 0);
-	GB_DB re = _REG.A + REG + GetFlag(FLAG_CARY);
-	SetFlag(FLAG_ZERO, (re & 0xff) == 0);
-	SetFlag(FLAG_HACA, ((_REG.A & 0x0F) + (REG & 0x0F) + GetFlag(FLAG_CARY)) & 0x10);
-	SetFlag(FLAG_CARY, re>0xff);
-	_REG.A = re & 0xFF;
-}
-void Z80::SUB(GB_BY REG) {
-	SetFlag(FLAG_NEGA, 1);
-	GB_DB re = _REG.A - REG;
-	SetFlag(FLAG_ZERO, (re & 0xff) == 0);
-	SetFlag(FLAG_HACA, (_REG.A & 0x0F) < (REG & 0x0F));
-	SetFlag(FLAG_CARY, _REG.A<REG);
-	_REG.A = re & 0xFF;
-}
-void Z80::SBC(GB_BY REG) {
-	SetFlag(FLAG_NEGA, 1);
-	GB_DB re = _REG.A - REG - GetFlag(FLAG_CARY);
-	SetFlag(FLAG_ZERO, (re&0xff) == 0);
-	SetFlag(FLAG_HACA, ((_REG.A ^ REG ^ (re & 0xff)) & (1 << 4)) != 0);
-	SetFlag(FLAG_CARY, (re & 0x100)>>8);
-	_REG.A = re & 0xFF;
-}
-void Z80::AND(GB_BY REG) {
-	_REG.A &= REG;
-	SetFlag(FLAG_ZERO, _REG.A == 0);
-	SetFlag(FLAG_NEGA, 0);
-	SetFlag(FLAG_HACA, 1);
-	SetFlag(FLAG_CARY, 0);
-
-}
-void Z80::OR(GB_BY REG) {
-	_REG.A |= REG;
-	SetFlag(FLAG_ZERO, _REG.A == 0);
-	SetFlag(FLAG_NEGA, 0);
-	SetFlag(FLAG_HACA, 0);
-	SetFlag(FLAG_CARY, 0);
-
-}
-void Z80::XOR(GB_BY REG) {
-	_REG.A ^= REG;
-	SetFlag(FLAG_ZERO, _REG.A == 0);
-	SetFlag(FLAG_NEGA, 0);
-	SetFlag(FLAG_HACA, 0);
-	SetFlag(FLAG_CARY, 0);
-
-}
-void Z80::CP(GB_BY REG) {
-	SetFlag(FLAG_NEGA, 1);
-	GB_DB re = _REG.A - REG;
-	SetFlag(FLAG_ZERO, (re & 0xff) == 0);
-	SetFlag(FLAG_HACA, (_REG.A & 0x0F) < (REG & 0x0F));
-	SetFlag(FLAG_CARY, REG>_REG.A);
-
-}
-void Z80::INC(GB_BY &REG) {
-	SetFlag(FLAG_NEGA, 0);
-	REG++;
-	SetFlag(FLAG_ZERO, REG == 0);
-	SetFlag(FLAG_HACA, (REG ^ (REG - 1)) & 0x10);
-}
-void Z80::DEC(GB_BY &REG) {
-	SetFlag(FLAG_NEGA, 1);
-	REG--;
-	SetFlag(FLAG_ZERO, REG == 0);
-	SetFlag(FLAG_HACA, (REG ^ (REG + 1)) & 0x10);
-}
-void Z80::EXADD(GB_BY HREG, GB_BY LREG) {
-	GB_BY by = _Memory.MemoryRead(HREG << 8 | LREG);
-	GB_DB HL = _REG.H << 8 | _REG.L;
-	uint32_t re = HL + by;
-
-
-	SetFlag(FLAG_NEGA, 0);
-	SetFlag(FLAG_HACA, ((HL & 0xFF) + by) & 0x100);
-	SetFlag(FLAG_CARY, (re & 0x10000)>>16);
-	_REG.H = (re >> 8) & 0xFF;
-	_REG.L = re & 0xFF;
-}
-
-
-void Z80::SWAP(GB_BY &REG) {
-	GB_BY tmpl = REG & 0xF;
-	GB_BY tmph = REG & 0xF0;
-	REG =(tmph >> 4) | (tmpl<<4);
-	SetFlag(FLAG_ZERO, REG == 0);
-	SetFlag(FLAG_NEGA, 0);
-	SetFlag(FLAG_HACA, 0);
-	SetFlag(FLAG_CARY, 0);
-
-}
-
-void Z80::RLC(GB_BY &REG) {
-	int arg = REG;
-	int re = (arg << 1) & 0xff;
-	if ((arg&(1 << 7)) != 0) {
-		re |= 1;
-		SetFlag(FLAG_CARY, 1);
-	}
-	else {
-		SetFlag(FLAG_CARY, 0);
-
-	}
-	SetFlag(FLAG_ZERO, re == 0);
-	SetFlag(FLAG_NEGA, 0);
-	SetFlag(FLAG_HACA, 0);
-	REG = re;
-}
-void Z80::RL(GB_BY &REG) {
-	int arg = REG;
-	int re = (arg << 1) & 0xff;
-	re |= GetFlag(FLAG_CARY)?1:0;
-	SetFlag(FLAG_ZERO, re == 0);
-	SetFlag(FLAG_NEGA, 0);
-	SetFlag(FLAG_HACA, 0);
-	SetFlag(FLAG_CARY, (arg&(1<<7))!=0);
-	REG = re;
-}
-void Z80::RRC(GB_BY &REG) {
-	int arg = REG;
-	int re = arg >> 1;
-	if ((arg&1)==1) {
-		re |= (1<<7);
-		SetFlag(FLAG_CARY, 1);
-	}
-	else {
-		SetFlag(FLAG_CARY, 0);
-
-	}
-	SetFlag(FLAG_ZERO, re == 0);
-	SetFlag(FLAG_NEGA, 0);
-	SetFlag(FLAG_HACA, 0);
-	REG = re;
-
-}
-void Z80::RR(GB_BY &REG) {
-	int arg = REG;
-	int re = arg >> 1;
-	re |= GetFlag(FLAG_CARY) ? 0x80 : 0;
-	SetFlag(FLAG_ZERO, re == 0);
-	SetFlag(FLAG_NEGA, 0);
-	SetFlag(FLAG_HACA, 0);
-	SetFlag(FLAG_CARY, (arg&1)!= 0);
-	REG = re;
-}
-void Z80::SLA(GB_BY &REG) {
-	GB_BY by = 0x80 & REG;
-	REG <<= 1;
-	SetFlag(FLAG_ZERO, REG == 0);
-	SetFlag(FLAG_NEGA, 0);
-	SetFlag(FLAG_HACA, 0);
-	SetFlag(FLAG_CARY, by & 0x80);
-
-}
-void Z80::SRA(GB_BY &REG) {
-	GB_BY by = 0x80 & REG;
-	GB_BY c = 0x1 & REG;
-	REG >>= 1;
-	REG += by;
-	SetFlag(FLAG_ZERO, REG == 0);
-	SetFlag(FLAG_NEGA, 0);
-	SetFlag(FLAG_HACA, 0);
-	SetFlag(FLAG_CARY, c & 0x1);
-}
-void Z80::SRL(GB_BY &REG) {
-	GB_BY by = 0x1 & REG;
-	REG >>= 1;
-	SetFlag(FLAG_ZERO, REG == 0);
-	SetFlag(FLAG_NEGA, 0);
-	SetFlag(FLAG_HACA, 0);
-	SetFlag(FLAG_CARY, by & 0x1);
-}
-
-void Z80::BIT(GB_BY REG, GB_BY No) {
-	SetFlag(FLAG_ZERO, (~REG & (1 << No)));
-	SetFlag(FLAG_NEGA, 0);
-	SetFlag(FLAG_HACA, 1);
-}
-void Z80::RST() {
-	_REG.SP -= 2;
-	_Memory.MemoryWrite(_REG.SP+1 , (_REG.PC >> 8) & 0xFF);
-	_Memory.MemoryWrite(_REG.SP, _REG.PC & 0xFF);
-	
-}
-void Z80::JP() {
-	_REG.PC = _Memory.MemoryRead(_REG.PC) | _Memory.MemoryRead(_REG.PC + 1) << 8;
-	
-}
-void Z80::CALL() {
-	_REG.SP -= 2;
-	_Memory.MemoryWrite(_REG.SP+1, ((_REG.PC + 2) >> 8) & 0xFF);
-	_Memory.MemoryWrite(_REG.SP, (_REG.PC + 2) & 0xFF);
-	
-	_REG.PC = _Memory.MemoryRead(_REG.PC) | _Memory.MemoryRead(_REG.PC + 1) << 8;
+					else {
+						reg.SetPC(0);//cancell inter.
+					}
 }
