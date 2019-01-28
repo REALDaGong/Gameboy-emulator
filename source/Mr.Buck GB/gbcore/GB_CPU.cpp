@@ -16,6 +16,8 @@ void CPU::Init() {
 	param = 0;
 	SpeedState = 0;
 	NextOp = NONE;
+	version = 0;
+	noHaltBug = 1;
 #define JUMPBIO
 #ifdef JUMPBIOS
 	_Memory._inbios = 0;
@@ -59,7 +61,7 @@ void CPU::tick() {
 	cputick = 0;
 
 	//check Inter first
-	if (NextOp==NONE&&(_Memory.MemoryRead(IE)&_Memory.MemoryRead(IF))) {
+	if (NextOp==NONE&&(_Memory.MemoryRead(IE)&0x1F&_Memory.MemoryRead(IF))) {
 		if (CpuState == CPUHALT || CpuState == STOP)
 		{
 			CpuState = RUN;
@@ -188,8 +190,14 @@ void CPU::tick() {
 
 GB_BY CPU::fetch() {
 	GB_BY op = _Memory.MemoryRead(reg.GetPC());
-	reg.IncPC();
-	
+	if (noHaltBug) {
+		reg.IncPC();
+		
+	}
+	else {
+
+		noHaltBug = 1;
+	}
 	if (op == 0x00) {//NOP
 		NextOp = NOP;
 		return op;
@@ -209,6 +217,10 @@ GB_BY CPU::fetch() {
 	}
 	if (op == 0x76) {//HALT
 		CpuState = CPUHALT;
+		if (IME == 0&&version!=2&&(_Memory.MemoryRead(IE)&0x1F&_Memory.MemoryRead(IF))) {//HALT bug,no such behaviour in CGB.
+			noHaltBug = 0;
+
+		}
 		return NONE;
 	}
 	if (op == 0x10) {

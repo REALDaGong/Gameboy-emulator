@@ -266,6 +266,7 @@ public:
 	void Init();
 	void Send(GB_BY nothing) {};
 private:
+	int version;//0=DMG,1=GBP,2=CGB,3=SGB
 	int optick;
 	int cputick;
 	Reg reg;
@@ -282,6 +283,7 @@ private:
 	int SpeedState;
 	GB_BY fetch();//change reg1,reg2.
 	GB_BY fetchCB();
+	int noHaltBug;
 	void InterHandle(GB_BY);
 
 	int dir;//memory read or write

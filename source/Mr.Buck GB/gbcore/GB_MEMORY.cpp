@@ -141,7 +141,7 @@ GB_BY Memory::MemoryRead(GB_DB ad) {
 					return 0xE0 | _memoryMapio[ad & 0xFF];
 				}
 				if (ad == IE) {
-					return _memoryMapio[ad & 0xFF]&0x1F;
+					return _memoryMapio[ad & 0xFF];
 				}
 				if (ad == TAC ||ad == TIMA ||ad==DIV||ad==TMA) {
 					return _Timer->TimerRead(ad);
